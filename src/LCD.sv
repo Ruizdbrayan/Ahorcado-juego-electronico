@@ -1,198 +1,193 @@
 module LCD #(
     parameter integer FRECUENCIA_RELOJ = 100_000_000
 )(
-    input  logic        clk,
-    input  logic        rst,
 
-    input  logic        write_enable,
-    input  logic [1:0]  addr,
-    input  logic [31:0] wdata,
+    input logic        clk,
+    input logic        rst,
+
+    // ============================================================
+    // BUS ESTANDAR
+    // ============================================================
+
+    input logic        wenable,
+    input logic [1:0]  addr,
+    input logic [31:0] wdata,
+
     output logic [31:0] rdata,
 
-    output logic        rs,
-    output logic        en,
-    output logic        rw,
-    output logic [3:0]  datos
+    // ============================================================
+    // LCD FISICO
+    // ============================================================
+
+    output logic       lcd_rs,
+    output logic       lcd_en,
+    output logic [3:0] lcd_datos
+
 );
+
 
     // ============================================================
     // DIRECCIONES
     // ============================================================
 
-    localparam logic [1:0] ADDR_DATA     = 2'b00;
-    localparam logic [1:0] ADDR_CONTROL  = 2'b01;
-    localparam logic [1:0] ADDR_POSICION = 2'b10;
-    localparam logic [1:0] ADDR_STATUS   = 2'b11;
-
-
-    // ============================================================
-    // COMANDOS LCD
-    // ============================================================
-
-    localparam logic [7:0] CMD_CLEAR      = 8'h01;
-    localparam logic [7:0] CMD_DISPLAY_ON = 8'h0C;
-    localparam logic [7:0] CMD_FUNCTION   = 8'h28;
-    localparam logic [7:0] CMD_ENTRY_MODE = 8'h06;
+    localparam logic [1:0]
+        LCD_DATOS   = 2'b00,
+        LCD_COMANDO = 2'b01;
 
 
     // ============================================================
     // TIEMPOS
     // ============================================================
 
-    localparam integer CICLOS_40MS =
-        FRECUENCIA_RELOJ / 25;
-
-    localparam integer CICLOS_5MS =
-        FRECUENCIA_RELOJ / 200;
-
-    localparam integer CICLOS_2MS =
-        FRECUENCIA_RELOJ / 500;
+    localparam integer CICLOS_1US =
+        FRECUENCIA_RELOJ / 1_000_000;
 
     localparam integer CICLOS_50US =
         FRECUENCIA_RELOJ / 20_000;
 
-    localparam integer CICLOS_1US =
-        FRECUENCIA_RELOJ / 1_000_000;
+    localparam integer CICLOS_100US =
+        FRECUENCIA_RELOJ / 10_000;
+
+    localparam integer CICLOS_150US =
+        (FRECUENCIA_RELOJ * 150) / 1_000_000;
+
+    localparam integer CICLOS_2MS =
+        FRECUENCIA_RELOJ / 500;
+
+    localparam integer CICLOS_5MS =
+        FRECUENCIA_RELOJ / 200;
+
+    localparam integer CICLOS_20MS =
+        FRECUENCIA_RELOJ / 50;
 
 
     // ============================================================
     // ESTADOS
     // ============================================================
 
-    typedef enum logic [4:0] {
+    localparam logic [3:0]
 
-        INICIO,
-        ESPERA_INICIAL,
+        ESPERA_POWER   = 4'd0,
 
-        INIT_1,
-        INIT_2,
-        INIT_3,
-        INIT_4BIT,
+        INIT_SETUP     = 4'd1,
+        INIT_EN_ALTO   = 4'd2,
+        INIT_EN_BAJO   = 4'd3,
+        INIT_ESPERA    = 4'd4,
 
-        INIT_FUNCION,
-        INIT_DISPLAY,
-        INIT_CLEAR,
-        INIT_ENTRY,
+        ESCRITURA_SETUP_ALTO = 4'd5,
+        ESCRITURA_EN_ALTO   = 4'd6,
+        ESCRITURA_EN_BAJO   = 4'd7,
 
-        ESPERA,
+        ESCRITURA_SETUP_BAJO = 4'd8,
+        ESCRITURA_EN_ALTO2   = 4'd9,
+        ESCRITURA_EN_BAJO2   = 4'd10,
 
-        NIBBLE_ALTO,
-        NIBBLE_BAJO,
+        ESPERA_COMANDO = 4'd11,
+        LISTO           = 4'd12;
 
-        ESPERA_COMANDO
 
-    } estado_t;
-
-    estado_t estado;
+    logic [3:0] estado;
 
 
     // ============================================================
-    // REGISTROS
+    // CONTADORES
     // ============================================================
 
     logic [31:0] contador;
 
-    logic [7:0] dato_registro;
 
-    logic [6:0] posicion_registro;
+    // ============================================================
+    // DATOS ACTUALES
+    // ============================================================
 
-    logic ocupado;
-    logic inicializado;
+    logic       rs_actual;
+
+    logic [7:0] dato_actual;
+
+    logic [3:0] nibble_init;
+
+    logic [2:0] paso_init;
 
 
     // ============================================================
-    // RDATA
+    // INDICE DE COMANDOS DE INICIALIZACION
+    //
+    // 0 -> 28
+    // 1 -> 0C
+    // 2 -> 06
+    // 3 -> 01
+    // ============================================================
+
+    logic [1:0] indice_init_comando;
+
+
+    // ============================================================
+    // BUSY
     // ============================================================
 
     always_comb begin
 
-        rdata = 32'b0;
+        rdata = 32'd0;
 
-        case (addr)
+        if (estado != LISTO)
+            rdata[0] = 1'b1;
 
-            ADDR_STATUS: begin
-
-                rdata[0] = ocupado;
-                rdata[1] = inicializado;
-
-            end
-
-            default: begin
-
-                rdata = 32'b0;
-
-            end
-
-        endcase
+        else
+            rdata[0] = 1'b0;
 
     end
 
 
     // ============================================================
-    // MAQUINA DE ESTADOS
+    // FSM LCD
     // ============================================================
 
     always_ff @(posedge clk or posedge rst) begin
 
         if (rst) begin
 
-            estado            <= INICIO;
-            contador          <= 32'd0;
+            estado <= ESPERA_POWER;
 
-            dato_registro     <= 8'd0;
-            posicion_registro <= 7'd0;
+            contador <= 32'd0;
 
-            ocupado           <= 1'b1;
-            inicializado      <= 1'b0;
+            rs_actual <= 1'b0;
 
-            rs                <= 1'b0;
-            rw                <= 1'b0;
-            en                <= 1'b0;
-            datos             <= 4'b0000;
+            dato_actual <= 8'h00;
+
+            nibble_init <= 4'h0;
+
+            paso_init <= 3'd0;
+
+            indice_init_comando <= 2'd0;
 
         end
 
         else begin
 
-            // EN solamente se activa durante los pulsos
-            en <= 1'b0;
-
             case (estado)
 
-                // =================================================
-                // INICIO
-                // =================================================
-
-                INICIO: begin
-
-                    ocupado  <= 1'b1;
-                    contador <= 0;
-
-                    rs    <= 1'b0;
-                    rw    <= 1'b0;
-                    datos <= 4'b0000;
-
-                    estado <= ESPERA_INICIAL;
-
-                end
-
 
                 // =================================================
-                // ESPERA DESPUES DEL ENCENDIDO
+                // ESPERA POWER-ON
                 // =================================================
 
-                ESPERA_INICIAL: begin
+                ESPERA_POWER: begin
 
-                    if (contador < CICLOS_40MS - 1) begin
+                    if (contador >= CICLOS_20MS - 1) begin
 
-                        contador <= contador + 1;
+                        contador <= 32'd0;
+
+                        paso_init <= 3'd0;
+
+                        nibble_init <= 4'h3;
+
+                        estado <= INIT_SETUP;
 
                     end
 
                     else begin
 
-                        contador <= 0;
-                        estado   <= INIT_1;
+                        contador <= contador + 1'b1;
 
                     end
 
@@ -200,82 +195,236 @@ module LCD #(
 
 
                 // =================================================
-                // SECUENCIA DE INICIALIZACION
+                // INIT SETUP
                 // =================================================
 
-                INIT_1: begin
+                INIT_SETUP: begin
 
-                    rs    <= 1'b0;
-                    rw    <= 1'b0;
-                    datos <= 4'b0011;
-                    en    <= 1'b1;
+                    contador <= 32'd0;
 
-                    contador <= 0;
-                    estado   <= INIT_2;
+                    estado <= INIT_EN_ALTO;
 
                 end
 
 
-                INIT_2: begin
+                // =================================================
+                // ENABLE ALTO
+                // =================================================
 
-                    if (contador < CICLOS_5MS - 1) begin
+                INIT_EN_ALTO: begin
 
-                        contador <= contador + 1;
+                    if (contador >= CICLOS_1US - 1) begin
+
+                        contador <= 32'd0;
+
+                        estado <= INIT_EN_BAJO;
 
                     end
 
                     else begin
 
-                        contador <= 0;
-
-                        datos <= 4'b0011;
-                        en    <= 1'b1;
-
-                        estado <= INIT_3;
+                        contador <= contador + 1'b1;
 
                     end
 
                 end
 
 
-                INIT_3: begin
+                // =================================================
+                // ENABLE BAJO
+                // =================================================
 
-                    if (contador < CICLOS_1US - 1) begin
+                INIT_EN_BAJO: begin
 
-                        contador <= contador + 1;
+                    contador <= 32'd0;
+
+                    estado <= INIT_ESPERA;
+
+                end
+
+
+                // =================================================
+                // ESPERA ENTRE NIBBLES DE INIT
+                // =================================================
+
+                INIT_ESPERA: begin
+
+                    // Primer 0x3 necesita >4.1 ms
+                    if (paso_init == 3'd0) begin
+
+                        if (contador >= CICLOS_5MS - 1) begin
+
+                            contador <= 32'd0;
+
+                            paso_init <= 3'd1;
+
+                            nibble_init <= 4'h3;
+
+                            estado <= INIT_SETUP;
+
+                        end
+
+                        else begin
+
+                            contador <= contador + 1'b1;
+
+                        end
+
+                    end
+
+                    // Segundo 0x3
+                    else if (paso_init == 3'd1) begin
+
+                        if (contador >= CICLOS_150US - 1) begin
+
+                            contador <= 32'd0;
+
+                            paso_init <= 3'd2;
+
+                            nibble_init <= 4'h3;
+
+                            estado <= INIT_SETUP;
+
+                        end
+
+                        else begin
+
+                            contador <= contador + 1'b1;
+
+                        end
+
+                    end
+
+                    // Tercer 0x3
+                    else if (paso_init == 3'd2) begin
+
+                        if (contador >= CICLOS_150US - 1) begin
+
+                            contador <= 32'd0;
+
+                            paso_init <= 3'd3;
+
+                            nibble_init <= 4'h2;
+
+                            estado <= INIT_SETUP;
+
+                        end
+
+                        else begin
+
+                            contador <= contador + 1'b1;
+
+                        end
+
+                    end
+
+                    // 0x2 termina la entrada a 4 bits
+                    else begin
+
+                        if (contador >= CICLOS_150US - 1) begin
+
+                            contador <= 32'd0;
+
+                            dato_actual <= 8'h28;
+
+                            rs_actual <= 1'b0;
+
+                            indice_init_comando <= 2'd0;
+
+                            estado <= ESCRITURA_SETUP_ALTO;
+
+                        end
+
+                        else begin
+
+                            contador <= contador + 1'b1;
+
+                        end
+
+                    end
+
+                end
+
+
+                // =================================================
+                // BYTE - HIGH NIBBLE SETUP
+                // =================================================
+
+                ESCRITURA_SETUP_ALTO: begin
+
+                    contador <= 32'd0;
+
+                    estado <= ESCRITURA_EN_ALTO;
+
+                end
+
+
+                // =================================================
+                // BYTE - HIGH NIBBLE ENABLE
+                // =================================================
+
+                ESCRITURA_EN_ALTO: begin
+
+                    if (contador >= CICLOS_1US - 1) begin
+
+                        contador <= 32'd0;
+
+                        estado <= ESCRITURA_EN_BAJO;
 
                     end
 
                     else begin
 
-                        contador <= 0;
-
-                        datos <= 4'b0011;
-                        en    <= 1'b1;
-
-                        estado <= INIT_4BIT;
+                        contador <= contador + 1'b1;
 
                     end
 
                 end
 
 
-                INIT_4BIT: begin
+                // =================================================
+                // BYTE - HIGH NIBBLE ENABLE BAJO
+                // =================================================
 
-                    if (contador < CICLOS_1US - 1) begin
+                ESCRITURA_EN_BAJO: begin
 
-                        contador <= contador + 1;
+                    contador <= 32'd0;
+
+                    estado <= ESCRITURA_SETUP_BAJO;
+
+                end
+
+
+                // =================================================
+                // BYTE - LOW NIBBLE SETUP
+                // =================================================
+
+                ESCRITURA_SETUP_BAJO: begin
+
+                    contador <= 32'd0;
+
+                    estado <= ESCRITURA_EN_ALTO2;
+
+                end
+
+
+                // =================================================
+                // BYTE - LOW NIBBLE ENABLE
+                // =================================================
+
+                ESCRITURA_EN_ALTO2: begin
+
+                    if (contador >= CICLOS_1US - 1) begin
+
+                        contador <= 32'd0;
+
+                        estado <= ESCRITURA_EN_BAJO2;
 
                     end
 
                     else begin
 
-                        contador <= 0;
-
-                        datos <= 4'b0010;
-                        en    <= 1'b1;
-
-                        estado <= INIT_FUNCION;
+                        contador <= contador + 1'b1;
 
                     end
 
@@ -283,255 +432,75 @@ module LCD #(
 
 
                 // =================================================
-                // FUNCTION SET
+                // BYTE - LOW NIBBLE ENABLE BAJO
                 // =================================================
 
-                INIT_FUNCION: begin
+                ESCRITURA_EN_BAJO2: begin
 
-                    if (contador < CICLOS_1US - 1) begin
+                    contador <= 32'd0;
 
-                        contador <= contador + 1;
-
-                    end
-
-                    else begin
-
-                        contador <= 0;
-
-                        dato_registro <= CMD_FUNCTION;
-                        rs <= 1'b0;
-
-                        estado <= NIBBLE_ALTO;
-
-                    end
+                    estado <= ESPERA_COMANDO;
 
                 end
 
 
                 // =================================================
-                // DISPLAY ON
-                // =================================================
-
-                INIT_DISPLAY: begin
-
-                    if (contador < CICLOS_50US - 1) begin
-
-                        contador <= contador + 1;
-
-                    end
-
-                    else begin
-
-                        contador <= 0;
-
-                        dato_registro <= CMD_DISPLAY_ON;
-                        rs <= 1'b0;
-
-                        estado <= NIBBLE_ALTO;
-
-                    end
-
-                end
-
-
-                // =================================================
-                // CLEAR
-                // =================================================
-
-                INIT_CLEAR: begin
-
-                    if (contador < CICLOS_50US - 1) begin
-
-                        contador <= contador + 1;
-
-                    end
-
-                    else begin
-
-                        contador <= 0;
-
-                        dato_registro <= CMD_CLEAR;
-                        rs <= 1'b0;
-
-                        estado <= NIBBLE_ALTO;
-
-                    end
-
-                end
-
-
-                // =================================================
-                // ENTRY MODE
-                // =================================================
-
-                INIT_ENTRY: begin
-
-                    if (contador < CICLOS_2MS - 1) begin
-
-                        contador <= contador + 1;
-
-                    end
-
-                    else begin
-
-                        contador <= 0;
-
-                        dato_registro <= CMD_ENTRY_MODE;
-                        rs <= 1'b0;
-
-                        estado <= NIBBLE_ALTO;
-
-                    end
-
-                end
-
-
-                // =================================================
-                // ESPERA NORMAL
-                // =================================================
-
-                ESPERA: begin
-
-                    ocupado <= 1'b0;
-
-                    if (write_enable) begin
-
-                        ocupado <= 1'b1;
-
-                        case (addr)
-
-                            // -------------------------------------
-                            // ESCRIBIR CARACTER
-                            // -------------------------------------
-
-                            ADDR_DATA: begin
-
-                                dato_registro <= wdata[7:0];
-
-                                rs <= 1'b1;
-
-                                estado <= NIBBLE_ALTO;
-
-                            end
-
-
-                            // -------------------------------------
-                            // COMANDO
-                            // -------------------------------------
-
-                            ADDR_CONTROL: begin
-
-                                dato_registro <= wdata[7:0];
-
-                                rs <= 1'b0;
-
-                                estado <= NIBBLE_ALTO;
-
-                            end
-
-
-                            // -------------------------------------
-                            // POSICION
-                            // -------------------------------------
-
-                            ADDR_POSICION: begin
-
-                                posicion_registro <= wdata[6:0];
-
-                                dato_registro <=
-                                    8'h80 | wdata[6:0];
-
-                                rs <= 1'b0;
-
-                                estado <= NIBBLE_ALTO;
-
-                            end
-
-
-                            default: begin
-
-                                estado <= ESPERA;
-
-                            end
-
-                        endcase
-
-                    end
-
-                end
-
-
-                // =================================================
-                // NIBBLE ALTO
-                // =================================================
-
-                NIBBLE_ALTO: begin
-
-                    datos <= dato_registro[7:4];
-
-                    en <= 1'b1;
-
-                    contador <= 0;
-
-                    estado <= NIBBLE_BAJO;
-
-                end
-
-
-                // =================================================
-                // NIBBLE BAJO
-                // =================================================
-
-                NIBBLE_BAJO: begin
-
-                    if (contador < CICLOS_1US - 1) begin
-
-                        contador <= contador + 1;
-
-                    end
-
-                    else begin
-
-                        contador <= 0;
-
-                        datos <= dato_registro[3:0];
-
-                        en <= 1'b1;
-
-                        estado <= ESPERA_COMANDO;
-
-                    end
-
-                end
-
-
-                // =================================================
-                // ESPERA DESPUES DE COMANDO
+                // ESPERA POST-COMANDO
                 // =================================================
 
                 ESPERA_COMANDO: begin
 
-                    // CLEAR necesita aproximadamente 1.5 ms.
-                    // Usamos 2 ms para tener margen.
+                    // Durante la inicialización usamos 2 ms
+                    // para todos los comandos.
+                    //
+                    // Es seguro aunque algunos comandos
+                    // necesiten mucho menos tiempo.
 
-                    if (dato_registro == CMD_CLEAR) begin
+                    if (contador >= CICLOS_2MS - 1) begin
 
-                        if (contador < CICLOS_2MS - 1) begin
+                        contador <= 32'd0;
 
-                            contador <= contador + 1;
+                        if (indice_init_comando == 2'd0) begin
+
+                            // 28 -> 0C
+
+                            dato_actual <= 8'h0C;
+
+                            indice_init_comando <= 2'd1;
+
+                            estado <= ESCRITURA_SETUP_ALTO;
+
+                        end
+
+                        else if (indice_init_comando == 2'd1) begin
+
+                            // 0C -> 06
+
+                            dato_actual <= 8'h06;
+
+                            indice_init_comando <= 2'd2;
+
+                            estado <= ESCRITURA_SETUP_ALTO;
+
+                        end
+
+                        else if (indice_init_comando == 2'd2) begin
+
+                            // 06 -> 01
+
+                            dato_actual <= 8'h01;
+
+                            indice_init_comando <= 2'd3;
+
+                            estado <= ESCRITURA_SETUP_ALTO;
 
                         end
 
                         else begin
 
-                            contador <= 0;
+                            // LCD inicializado
 
-                            ocupado <= 1'b0;
-
-                            if (!inicializado)
-                                estado <= INIT_ENTRY;
-                            else
-                                estado <= ESPERA;
+                            estado <= LISTO;
 
                         end
 
@@ -539,47 +508,40 @@ module LCD #(
 
                     else begin
 
-                        if (contador < CICLOS_50US - 1) begin
+                        contador <= contador + 1'b1;
 
-                            contador <= contador + 1;
+                    end
+
+                end
+
+
+                // =================================================
+                // LISTO
+                // =================================================
+
+                LISTO: begin
+
+                    contador <= 32'd0;
+
+                    if (wenable) begin
+
+                        if (addr == LCD_DATOS) begin
+
+                            rs_actual <= 1'b1;
+
+                            dato_actual <= wdata[7:0];
+
+                            estado <= ESCRITURA_SETUP_ALTO;
 
                         end
 
-                        else begin
+                        else if (addr == LCD_COMANDO) begin
 
-                            contador <= 0;
+                            rs_actual <= 1'b0;
 
-                            ocupado <= 1'b0;
+                            dato_actual <= wdata[7:0];
 
-                            if (!inicializado) begin
-
-                                case (dato_registro)
-
-                                    CMD_FUNCTION:
-                                        estado <= INIT_DISPLAY;
-
-                                    CMD_DISPLAY_ON:
-                                        estado <= INIT_CLEAR;
-
-                                    CMD_ENTRY_MODE: begin
-
-                                        inicializado <= 1'b1;
-                                        estado <= ESPERA;
-
-                                    end
-
-                                    default:
-                                        estado <= ESPERA;
-
-                                endcase
-
-                            end
-
-                            else begin
-
-                                estado <= ESPERA;
-
-                            end
+                            estado <= ESCRITURA_SETUP_ALTO;
 
                         end
 
@@ -590,13 +552,150 @@ module LCD #(
 
                 default: begin
 
-                    estado <= INICIO;
+                    estado <= ESPERA_POWER;
+
+                    contador <= 32'd0;
 
                 end
 
             endcase
 
         end
+
+    end
+
+
+    // ============================================================
+    // SALIDAS FISICAS
+    // ============================================================
+
+    always_comb begin
+
+        lcd_rs = rs_actual;
+
+        lcd_en = 1'b0;
+
+        lcd_datos = 4'h0;
+
+
+        case (estado)
+
+
+            // =====================================================
+            // INIT
+            // =====================================================
+
+            INIT_SETUP,
+            INIT_EN_ALTO,
+            INIT_EN_BAJO: begin
+
+                lcd_rs = 1'b0;
+
+                lcd_datos = nibble_init;
+
+            end
+
+
+            // =====================================================
+            // ENABLE DEL INIT
+            // =====================================================
+
+            INIT_EN_ALTO: begin
+
+                lcd_rs = 1'b0;
+
+                lcd_datos = nibble_init;
+
+                lcd_en = 1'b1;
+
+            end
+
+
+            // =====================================================
+            // BYTE - HIGH NIBBLE
+            // =====================================================
+
+            ESCRITURA_SETUP_ALTO: begin
+
+                lcd_rs = rs_actual;
+
+                lcd_datos = dato_actual[7:4];
+
+                lcd_en = 1'b0;
+
+            end
+
+
+            ESCRITURA_EN_ALTO: begin
+
+                lcd_rs = rs_actual;
+
+                lcd_datos = dato_actual[7:4];
+
+                lcd_en = 1'b1;
+
+            end
+
+
+            ESCRITURA_EN_BAJO: begin
+
+                lcd_rs = rs_actual;
+
+                lcd_datos = dato_actual[7:4];
+
+                lcd_en = 1'b0;
+
+            end
+
+
+            // =====================================================
+            // BYTE - LOW NIBBLE
+            // =====================================================
+
+            ESCRITURA_SETUP_BAJO: begin
+
+                lcd_rs = rs_actual;
+
+                lcd_datos = dato_actual[3:0];
+
+                lcd_en = 1'b0;
+
+            end
+
+
+            ESCRITURA_EN_ALTO2: begin
+
+                lcd_rs = rs_actual;
+
+                lcd_datos = dato_actual[3:0];
+
+                lcd_en = 1'b1;
+
+            end
+
+
+            ESCRITURA_EN_BAJO2: begin
+
+                lcd_rs = rs_actual;
+
+                lcd_datos = dato_actual[3:0];
+
+                lcd_en = 1'b0;
+
+            end
+
+
+            default: begin
+
+                lcd_rs = rs_actual;
+
+                lcd_datos = 4'h0;
+
+                lcd_en = 1'b0;
+
+            end
+
+        endcase
 
     end
 

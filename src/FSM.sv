@@ -1,222 +1,102 @@
 module FSM (
 
-    input logic clk,
-    input logic rst,
+    input logic        clk,
+    input logic        rst,
 
-    input logic partida_iniciada,
+    input logic        partida_iniciada,
 
     input logic [63:0] palabra_estado,
-    input logic [3:0] cantidad_letras,
+    input logic [3:0]  cantidad_letras,
 
-    input logic [4:0] fallos,
+    input logic [4:0]  fallos,
 
-    input logic tiempo_agotado,
+    input logic        tiempo_agotado,
 
     output logic [1:0] estado_actual,
 
-    output logic victoria,
-    output logic derrota,
-    output logic mostrar_guiones,
+    output logic       victoria,
+    output logic       derrota,
+    output logic       mostrar_guiones,
 
     output logic [63:0] palabra_lcd
 
 );
 
-
     // ============================================================
     // ESTADOS
     // ============================================================
 
-    localparam logic [1:0] SELECTOR    = 2'b00;
-    localparam logic [1:0] JUGANDO    = 2'b01;
-    localparam logic [1:0] FINALIZADO = 2'b10;
+    localparam logic [1:0]
+        SELECTOR   = 2'b00,
+        JUGANDO    = 2'b01,
+        FINALIZADO = 2'b10;
 
+    // ============================================================
+    // DURACION DE PANTALLA FINAL
+    // 2 segundos a 100 MHz
+    // ============================================================
+
+    localparam integer DURACION_FINAL = 200_000_000;
+
+    logic [27:0] contador_final;
+
+    // ============================================================
+    // PALABRA
+    // ============================================================
 
     logic palabra_completa;
-
-    // Indica que ya existe una palabra inicializada.
     logic palabra_inicializada;
 
+    // ============================================================
+    // RESULTADO FINAL MEMORIZADO
+    //
+    // 1 = victoria
+    // 0 = derrota
+    // ============================================================
+
+    logic resultado_final_victoria;
 
     // ============================================================
     // DETERMINAR SI LA PALABRA ESTA COMPLETA
     // ============================================================
 
     always_comb begin
-
         palabra_completa = 1'b1;
 
-        // --------------------------------------------------------
-        // Si todavía no hay palabra, NO puede estar completa.
-        // --------------------------------------------------------
-
         if (cantidad_letras == 4'd0) begin
-
             palabra_completa = 1'b0;
-
+        end else begin
+            for (int i = 0; i < 8; i++) begin
+                if (i < cantidad_letras) begin
+                    // Evaluar los bytes de 8 en 8 desde MSB
+                    if (!(palabra_estado[(7-i)*8 +: 8] >= "A" && palabra_estado[(7-i)*8 +: 8] <= "Z")) begin
+                        palabra_completa = 1'b0;
+                    end
+                end
+            end
         end
-
-        else begin
-
-            // ----------------------------------------------------
-            // LETRA 1
-            // ----------------------------------------------------
-
-            if (cantidad_letras >= 4'd1) begin
-
-                if (!(
-                    palabra_estado[63:56] >= "A" &&
-                    palabra_estado[63:56] <= "Z"
-                ))
-                    palabra_completa = 1'b0;
-
-            end
-
-
-            // ----------------------------------------------------
-            // LETRA 2
-            // ----------------------------------------------------
-
-            if (cantidad_letras >= 4'd2) begin
-
-                if (!(
-                    palabra_estado[55:48] >= "A" &&
-                    palabra_estado[55:48] <= "Z"
-                ))
-                    palabra_completa = 1'b0;
-
-            end
-
-
-            // ----------------------------------------------------
-            // LETRA 3
-            // ----------------------------------------------------
-
-            if (cantidad_letras >= 4'd3) begin
-
-                if (!(
-                    palabra_estado[47:40] >= "A" &&
-                    palabra_estado[47:40] <= "Z"
-                ))
-                    palabra_completa = 1'b0;
-
-            end
-
-
-            // ----------------------------------------------------
-            // LETRA 4
-            // ----------------------------------------------------
-
-            if (cantidad_letras >= 4'd4) begin
-
-                if (!(
-                    palabra_estado[39:32] >= "A" &&
-                    palabra_estado[39:32] <= "Z"
-                ))
-                    palabra_completa = 1'b0;
-
-            end
-
-
-            // ----------------------------------------------------
-            // LETRA 5
-            // ----------------------------------------------------
-
-            if (cantidad_letras >= 4'd5) begin
-
-                if (!(
-                    palabra_estado[31:24] >= "A" &&
-                    palabra_estado[31:24] <= "Z"
-                ))
-                    palabra_completa = 1'b0;
-
-            end
-
-
-            // ----------------------------------------------------
-            // LETRA 6
-            // ----------------------------------------------------
-
-            if (cantidad_letras >= 4'd6) begin
-
-                if (!(
-                    palabra_estado[23:16] >= "A" &&
-                    palabra_estado[23:16] <= "Z"
-                ))
-                    palabra_completa = 1'b0;
-
-            end
-
-
-            // ----------------------------------------------------
-            // LETRA 7
-            // ----------------------------------------------------
-
-            if (cantidad_letras >= 4'd7) begin
-
-                if (!(
-                    palabra_estado[15:8] >= "A" &&
-                    palabra_estado[15:8] <= "Z"
-                ))
-                    palabra_completa = 1'b0;
-
-            end
-
-
-            // ----------------------------------------------------
-            // LETRA 8
-            // ----------------------------------------------------
-
-            if (cantidad_letras >= 4'd8) begin
-
-                if (!(
-                    palabra_estado[7:0] >= "A" &&
-                    palabra_estado[7:0] <= "Z"
-                ))
-                    palabra_completa = 1'b0;
-
-            end
-
-        end
-
     end
 
-
     // ============================================================
-    // CONTROL DE PALABRA INICIALIZADA
+    // PALABRA INICIALIZADA
     // ============================================================
 
     always_ff @(posedge clk or posedge rst) begin
 
         if (rst) begin
-
             palabra_inicializada <= 1'b0;
-
-        end
-
-        else begin
-
-            // Nueva partida: todavía no consideramos
-            // válida la palabra anterior.
+        end else begin
             if (partida_iniciada) begin
-
                 palabra_inicializada <= 1'b0;
-
-            end
-
-            // Cuando Validador_Letra ya produjo los guiones,
-            // podemos considerar inicializada la palabra.
-            else if (estado_actual == JUGANDO) begin
-
+            end else if (estado_actual == JUGANDO) begin
                 if (cantidad_letras != 4'd0)
                     palabra_inicializada <= 1'b1;
-
+            end else if (estado_actual == SELECTOR) begin
+                palabra_inicializada <= 1'b0;
             end
-
         end
 
     end
-
 
     // ============================================================
     // MAQUINA DE ESTADOS
@@ -226,14 +106,13 @@ module FSM (
 
         if (rst) begin
 
-            estado_actual <= SELECTOR;
+            estado_actual            <= SELECTOR;
+            contador_final           <= 28'd0;
+            resultado_final_victoria <= 1'b0;
 
-        end
-
-        else begin
+        end else begin
 
             case (estado_actual)
-
 
                 // =================================================
                 // SELECTOR
@@ -241,11 +120,14 @@ module FSM (
 
                 SELECTOR: begin
 
-                    if (partida_iniciada)
-                        estado_actual <= JUGANDO;
+                    contador_final <= 28'd0;
+
+                    if (partida_iniciada) begin
+                        estado_actual            <= JUGANDO;
+                        resultado_final_victoria <= 1'b0;
+                    end
 
                 end
-
 
                 // =================================================
                 // JUGANDO
@@ -253,42 +135,27 @@ module FSM (
 
                 JUGANDO: begin
 
-                    // ------------------------------------------------
-                    // Primero verificar timeout
-                    // ------------------------------------------------
+                    contador_final <= 28'd0;
 
+                    // TIMEOUT
                     if (tiempo_agotado) begin
-
-                        estado_actual <= FINALIZADO;
-
+                        estado_actual            <= FINALIZADO;
+                        resultado_final_victoria <= 1'b0;
                     end
 
-                    // ------------------------------------------------
-                    // Luego verificar seis fallos
-                    // ------------------------------------------------
-
+                    // 6 FALLOS O MÁS
                     else if (fallos >= 5'd6) begin
-
-                        estado_actual <= FINALIZADO;
-
+                        estado_actual            <= FINALIZADO;
+                        resultado_final_victoria <= 1'b0;
                     end
 
-                    // ------------------------------------------------
-                    // Finalmente verificar palabra completa
-                    //
-                    // SOLO después de que exista una palabra
-                    // inicializada.
-                    // ------------------------------------------------
-
-                    else if (palabra_inicializada &&
-                             palabra_completa) begin
-
-                        estado_actual <= FINALIZADO;
-
+                    // PALABRA COMPLETA
+                    else if (palabra_inicializada && palabra_completa) begin
+                        estado_actual            <= FINALIZADO;
+                        resultado_final_victoria <= 1'b1;
                     end
 
                 end
-
 
                 // =================================================
                 // FINALIZADO
@@ -296,11 +163,15 @@ module FSM (
 
                 FINALIZADO: begin
 
-                    if (partida_iniciada)
-                        estado_actual <= JUGANDO;
+                    if (contador_final >= DURACION_FINAL - 1) begin
+                        contador_final           <= 28'd0;
+                        estado_actual            <= SELECTOR;
+                        resultado_final_victoria <= 1'b0;
+                    end else begin
+                        contador_final <= contador_final + 1'b1;
+                    end
 
                 end
-
 
                 // =================================================
                 // DEFAULT
@@ -308,7 +179,9 @@ module FSM (
 
                 default: begin
 
-                    estado_actual <= SELECTOR;
+                    estado_actual            <= SELECTOR;
+                    contador_final           <= 28'd0;
+                    resultado_final_victoria <= 1'b0;
 
                 end
 
@@ -318,48 +191,21 @@ module FSM (
 
     end
 
-
     // ============================================================
     // SALIDAS
     // ============================================================
 
     always_comb begin
 
-        victoria = 1'b0;
-        derrota = 1'b0;
-
-        palabra_lcd = palabra_estado;
-
+        victoria        = 1'b0;
+        derrota         = 1'b0;
+        palabra_lcd     = palabra_estado;
         mostrar_guiones = 1'b0;
 
-
         if (estado_actual == FINALIZADO) begin
-
             mostrar_guiones = 1'b1;
-
-
-            // ====================================================
-            // VICTORIA
-            // ====================================================
-
-            if (palabra_completa &&
-                fallos < 5'd6) begin
-
-                victoria = 1'b1;
-
-            end
-
-
-            // ====================================================
-            // DERROTA
-            // ====================================================
-
-            else begin
-
-                derrota = 1'b1;
-
-            end
-
+            victoria        = resultado_final_victoria;
+            derrota         = !resultado_final_victoria;
         end
 
     end
