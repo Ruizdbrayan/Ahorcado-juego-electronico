@@ -9,7 +9,7 @@ module TOP_AHORCADO (
     // UART FISICO
     // ============================================================
 
-    input  logic        RsRx,
+    input logic        RsRx,
     output logic       RsTx,
 
     // ============================================================
@@ -23,12 +23,15 @@ module TOP_AHORCADO (
 
     output logic [2:0] leds,
 
+    // ============================================================
+    // LCD FISICO
+    // ============================================================
+
     output logic       lcd_rs,
     output logic       lcd_en,
     output logic [3:0] lcd_datos
 
 );
-
 
     // ============================================================
     // DEBOUNCER
@@ -37,14 +40,10 @@ module TOP_AHORCADO (
     logic [1:0] botones_estables;
 
     Debouncer debouncer_inst (
-
-        .clk(clk),
-        .rst(rst),
-
-        .botones(botones),
-
-        .estado_botones(botones_estables)
-
+        .clk            (clk),
+        .rst            (rst),
+        .botones        (botones),
+        .estado_botones (botones_estables)
     );
 
 
@@ -56,16 +55,12 @@ module TOP_AHORCADO (
     logic partida_iniciada;
 
     Selector_dificultad selector_dificultad_inst (
-
-        .clk(clk),
-        .rst(rst),
-
-        .seleccionar(botones_estables[0]),
-        .aceptar(botones_estables[1]),
-
-        .dificultad(dificultad),
-        .partida_iniciada(partida_iniciada)
-
+        .clk              (clk),
+        .rst              (rst),
+        .seleccionar      (botones_estables[0]),
+        .aceptar          (botones_estables[1]),
+        .dificultad       (dificultad),
+        .partida_iniciada (partida_iniciada)
     );
 
 
@@ -74,19 +69,15 @@ module TOP_AHORCADO (
     // ============================================================
 
     logic [63:0] palabra_actual;
-    logic [3:0] cantidad_letras;
+    logic [3:0]  cantidad_letras;
 
     Selector_palabra selector_palabra_inst (
-
-        .clk(clk),
-        .rst(rst),
-
+        .clk             (clk),
+        .rst             (rst),
         .partida_iniciada(partida_iniciada),
-        .dificultad(dificultad),
-
-        .palabra_actual(palabra_actual),
-        .cantidad_letras(cantidad_letras)
-
+        .dificultad      (dificultad),
+        .palabra_actual  (palabra_actual),
+        .cantidad_letras (cantidad_letras)
     );
 
 
@@ -100,6 +91,9 @@ module TOP_AHORCADO (
 
     logic victoria;
     logic derrota;
+
+    logic letra_correcta;
+    logic letra_incorrecta;
 
     logic mostrar_guiones;
 
@@ -119,24 +113,17 @@ module TOP_AHORCADO (
 
     logic tiempo_agotado;
 
-
     Temporizador temporizador_inst (
-
-        .clk(clk),
-        .rst(rst),
-
-        .partida_activa(partida_activa),
-        .dificultad(dificultad),
-
-        .victoria(victoria),
-        .derrota(derrota),
-
-        .unidades(unidades),
-        .decenas(decenas),
-        .centenas(centenas),
-
-        .timeout(tiempo_agotado)
-
+        .clk            (clk),
+        .rst            (rst),
+        .partida_activa (partida_activa),
+        .dificultad     (dificultad),
+        .victoria       (victoria),
+        .derrota        (derrota),
+        .unidades       (unidades),
+        .decenas        (decenas),
+        .centenas       (centenas),
+        .timeout        (tiempo_agotado)
     );
 
 
@@ -145,49 +132,42 @@ module TOP_AHORCADO (
     // ============================================================
 
     siete_segmentos siete_segmentos_inst (
-
-        .clk(clk),
-        .rst(rst),
-
-        .unidades(unidades),
-        .decenas(decenas),
-        .centenas(centenas),
-
+        .clk            (clk),
+        .rst            (rst),
+        .unidades       (unidades),
+        .decenas         (decenas),
+        .centenas        (centenas),
         .mostrar_guiones(mostrar_guiones),
-
-        .segmentos(segmentos),
-        .anodos(anodos)
-
+        .segmentos      (segmentos),
+        .anodos         (anodos)
     );
 
 
     // ============================================================
-    // FSM
+    // FSM PRINCIPAL
     // ============================================================
 
     FSM fsm_inst (
+        .clk              (clk),
+        .rst              (rst),
 
-        .clk(clk),
-        .rst(rst),
+        .partida_iniciada (partida_iniciada),
 
-        .partida_iniciada(partida_iniciada),
+        .palabra_estado   (palabra_estado),
+        .cantidad_letras  (cantidad_letras),
 
-        .palabra_estado(palabra_estado),
-        .cantidad_letras(cantidad_letras),
+        .fallos           (fallos),
 
-        .fallos(fallos),
+        .tiempo_agotado   (tiempo_agotado),
 
-        .tiempo_agotado(tiempo_agotado),
+        .estado_actual    (estado_actual),
 
-        .estado_actual(estado_actual),
+        .victoria         (victoria),
+        .derrota          (derrota),
 
-        .victoria(victoria),
-        .derrota(derrota),
+        .mostrar_guiones  (mostrar_guiones),
 
-        .mostrar_guiones(mostrar_guiones),
-
-        .palabra_lcd(palabra_lcd)
-
+        .palabra_lcd      (palabra_lcd)
     );
 
 
@@ -195,8 +175,7 @@ module TOP_AHORCADO (
     // PARTIDA ACTIVA
     // ============================================================
 
-    assign partida_activa =
-        (estado_actual == 2'b01);
+    assign partida_activa = (estado_actual == 2'b01);
 
 
     // ============================================================
@@ -211,22 +190,17 @@ module TOP_AHORCADO (
 
     // ============================================================
     // UART
-    //
-    // IMPORTANTE:
-    // NO SE MODIFICAN SUS ENTRADAS NI SALIDAS.
     // ============================================================
 
     UART uart_inst (
+        .clk          (clk),
+        .rst          (rst),
 
-        .clk(clk),
-        .rst(rst),
+        .write_enable (uart_write_enable),
+        .addr         (uart_addr),
+        .wdata        (uart_wdata),
 
-        .write_enable(uart_write_enable),
-        .addr(uart_addr),
-        .wdata(uart_wdata),
-
-        .rdata(uart_rdata)
-
+        .rdata        (uart_rdata)
     );
 
 
@@ -235,43 +209,34 @@ module TOP_AHORCADO (
     // ============================================================
 
     Validador_Letra validador_letra_inst (
+        .clk              (clk),
+        .rst              (rst),
 
-        .clk(clk),
-        .rst(rst),
+        .partida_iniciada (partida_iniciada),
+        .partida_activa   (partida_activa),
 
-        .partida_iniciada(partida_iniciada),
-        .partida_activa(partida_activa),
+        .palabra_actual   (palabra_actual),
+        .cantidad_letras  (cantidad_letras),
 
-        .palabra_actual(palabra_actual),
-        .cantidad_letras(cantidad_letras),
+        .dificultad       (dificultad),
 
-        .dificultad(dificultad),
+        .tiempo_agotado   (tiempo_agotado),
 
-        .victoria(victoria),
-        .derrota(derrota),
-        .tiempo_agotado(tiempo_agotado),
+        .rdata            (uart_rdata),
 
-        .rdata(uart_rdata),
+        .rx_fisico        (RsRx),
+        .tx_fisico        (RsTx),
 
-        // ========================================================
-        // UART FISICO
-        // ========================================================
+        .write_enable     (uart_write_enable),
+        .addr             (uart_addr),
+        .wdata            (uart_wdata),
 
-        .rx_fisico(RsRx),
-        .tx_fisico(RsTx),
+        .palabra_estado   (palabra_estado),
 
-        // ========================================================
-        // BUS UART
-        // ========================================================
+        .fallos           (fallos),
 
-        .write_enable(uart_write_enable),
-        .addr(uart_addr),
-        .wdata(uart_wdata),
-
-        .palabra_estado(palabra_estado),
-
-        .fallos(fallos)
-
+        .letra_correcta   (letra_correcta),
+        .letra_incorrecta(letra_incorrecta)
     );
 
 
@@ -280,14 +245,10 @@ module TOP_AHORCADO (
     // ============================================================
 
     LED_estado led_estado_inst (
-
-        .clk(clk),
-        .rst(rst),
-
+        .clk          (clk),
+        .rst          (rst),
         .estado_actual(estado_actual),
-
-        .leds(leds)
-
+        .leds         (leds)
     );
 
 
@@ -296,34 +257,72 @@ module TOP_AHORCADO (
     // ============================================================
 
     Buzzer buzzer_inst (
-
-        .clk(clk),
-        .rst(rst),
-
-        .victoria(victoria),
-        .derrota(derrota),
-
-        .buzzer(buzzer)
-
+        .clk              (clk),
+        .rst              (rst),
+        .letra_correcta   (letra_correcta),
+        .letra_incorrecta(letra_incorrecta),
+        .victoria         (victoria),
+        .derrota          (derrota),
+        .buzzer           (buzzer)
     );
+
+
+    // ============================================================
+    // BUS DEL PERIFERICO LCD
+    // ============================================================
+
+    logic        lcd_write_enable;
+    logic [1:0]  lcd_addr;
+    logic [31:0] lcd_wdata;
+    logic [31:0] lcd_rdata;
 
 
     // ============================================================
     // CONTROLADOR LCD
     // ============================================================
 
-    Controlador_LCD controlador_lcd_inst (
+    Controlador_LCD controlador_lcd (
+        .clk             (clk),
+        .rst             (rst),
 
-        .clk(clk),
-        .rst(rst),
+        .estado_actual   (estado_actual),
+        .dificultad      (dificultad),
 
-        .palabra_lcd(palabra_lcd),
+        .derrota         (derrota),
+        .victoria        (victoria),
+        .fallos          (fallos),
 
-        .lcd_rs(lcd_rs),
-        .lcd_en(lcd_en),
-        .lcd_datos(lcd_datos)
+        .palabra_estado  (palabra_estado),
+        .palabra_actual  (palabra_actual),
+        .cantidad_letras (cantidad_letras),
 
+        .wenable         (lcd_write_enable),
+        .addr            (lcd_addr),
+        .wdata           (lcd_wdata),
+
+        .rdata           (lcd_rdata)
     );
 
+
+    // ============================================================
+    // PERIFERICO LCD
+    // ============================================================
+
+    LCD #(
+        .FRECUENCIA_RELOJ(100_000_000)
+    ) periferico_lcd (
+
+        .clk       (clk),
+        .rst       (rst),
+
+        .wenable   (lcd_write_enable),
+        .addr       (lcd_addr),
+        .wdata      (lcd_wdata),
+        .rdata      (lcd_rdata),
+
+        .lcd_rs    (lcd_rs),
+        .lcd_en    (lcd_en),
+        .lcd_datos (lcd_datos)
+    );
 
 endmodule
