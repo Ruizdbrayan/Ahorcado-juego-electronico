@@ -11,8 +11,6 @@ module Validador_Letra (
 
     input logic        dificultad,
 
-    input logic        victoria,
-    input logic        derrota,
     input logic        tiempo_agotado,
 
     input logic [31:0] rdata,
@@ -25,209 +23,417 @@ module Validador_Letra (
     output logic [31:0] wdata,
 
     output logic [63:0] palabra_estado,
-    output logic [4:0]  fallos
+    output logic [4:0]  fallos,
+
+    output logic        letra_correcta,
+    output logic        letra_incorrecta
+
 );
 
-    // =========================================================
-    // PARAMETROS UART
-    // =========================================================
 
-    localparam integer FRECUENCIA_RELOJ = 100_000_000;
-    localparam integer BAUDRATE = 115_200;
+// =========================================================
+// PARAMETROS UART
+// =========================================================
 
-    localparam integer CICLOS_BAUD =
-        FRECUENCIA_RELOJ / BAUDRATE;
+localparam integer FRECUENCIA_RELOJ = 100_000_000;
+localparam integer BAUDRATE        = 115_200;
 
-    localparam integer MEDIO_BAUD =
-        CICLOS_BAUD / 2;
+localparam integer CICLOS_BAUD =
+    FRECUENCIA_RELOJ / BAUDRATE;
 
-
-    // =========================================================
-    // ESTADOS
-    // =========================================================
-
-    localparam logic [4:0] ESPERA             = 5'd0;
-    localparam logic [4:0] INICIALIZAR        = 5'd1;
-    localparam logic [4:0] LEER_CONTROL       = 5'd2;
-    localparam logic [4:0] LEER_DATO          = 5'd3;
-    localparam logic [4:0] VALIDAR            = 5'd4;
-    localparam logic [4:0] ACTUALIZAR         = 5'd5;
-    localparam logic [4:0] LIMPIAR_RX         = 5'd6;
-    localparam logic [4:0] PREPARAR_INICIO    = 5'd7;
-    localparam logic [4:0] PREPARAR_RESULTADO  = 5'd8;
-    localparam logic [4:0] PREPARAR_FINAL     = 5'd9;
-    localparam logic [4:0] ENVIAR_BYTE        = 5'd10;
-    localparam logic [4:0] ESPERAR_TX         = 5'd11;
-    localparam logic [4:0] RECEPCION_SERIAL   = 5'd12;
+localparam integer MEDIO_BAUD =
+    CICLOS_BAUD / 2;
 
 
-    logic [4:0] estado_actual;
+// =========================================================
+// ESTADOS
+// =========================================================
+
+localparam logic [4:0]
+
+    ESPERA             = 5'd0,
+    INICIALIZAR        = 5'd1,
+    LEER_CONTROL       = 5'd2,
+    LEER_DATO          = 5'd3,
+    VALIDAR            = 5'd4,
+    ACTUALIZAR         = 5'd5,
+    LIMPIAR_RX         = 5'd6,
+    PREPARAR_INICIO    = 5'd7,
+    PREPARAR_RESULTADO = 5'd8,
+    PREPARAR_FINAL     = 5'd9,
+    ENVIAR_BYTE        = 5'd10,
+    ESPERAR_TX         = 5'd11,
+    RECEPCION_SERIAL   = 5'd12;
 
 
-    // =========================================================
-    // PALABRA
-    // =========================================================
-
-    logic [63:0] palabra_oculta;
-    logic [63:0] palabra_nueva;
-
-    logic [7:0] letra_recibida;
-
-    logic letra_valida;
-    logic letra_repetida;
-    logic letra_correcta;
-
-    logic [25:0] letras_usadas;
+logic [4:0] estado_actual;
 
 
-    // =========================================================
-    // MENSAJE UART
-    // =========================================================
+// =========================================================
+// PALABRA
+// =========================================================
 
-    logic [7:0] mensaje [0:255];
+logic [63:0] palabra_oculta;
+logic [63:0] palabra_nueva;
+logic [63:0] palabra_final;
 
-    logic [7:0] indice_mensaje;
-    logic [8:0] longitud_mensaje;
+logic [7:0] letra_recibida;
 
+logic letra_valida;
+logic letra_repetida;
 
-    // =========================================================
-    // RECEPCION FISICA
-    // =========================================================
-
-    logic [15:0] contador_baud_rx;
-    logic [3:0]  bit_serial_rx;
+logic letra_correcta_calculada;
 
 
-    integer i;
+// =========================================================
+// LETRAS UTILIZADAS
+// =========================================================
+
+logic [25:0] letras_usadas;
 
 
-    // =========================================================
-    // FUNCIONES
-    // =========================================================
+// =========================================================
+// UART
+// =========================================================
 
-    function automatic [7:0] ascii_numero(
-        input logic [3:0] numero
-    );
+logic [7:0] mensaje [0:255];
 
-        begin
-            ascii_numero = "0" + numero;
-        end
-
-    endfunction
+logic [7:0] indice_mensaje;
+logic [8:0] longitud_mensaje;
 
 
-    function automatic [4:0] indice_letra(
-        input logic [7:0] letra
-    );
+// =========================================================
+// RECEPCION SERIAL
+// =========================================================
 
-        begin
-            indice_letra = letra - "A";
-        end
-
-    endfunction
+logic [15:0] contador_baud_rx;
+logic [3:0]  bit_serial_rx;
 
 
-    // =========================================================
-    // LETRA VALIDA
-    // =========================================================
+// =========================================================
+// FINAL
+// =========================================================
 
-    always_comb begin
+logic partida_terminada;
+logic resultado_final_victoria;
+logic resultado_final_timeout;
 
-        letra_valida = 1'b0;
 
-        if ((letra_recibida >= "A") &&
-            (letra_recibida <= "Z"))
+// =========================================================
+// VARIABLE PARA FOR
+// =========================================================
 
-            letra_valida = 1'b1;
+integer i;
 
+
+// =========================================================
+// FUNCION ASCII NUMERO
+// =========================================================
+
+function automatic [7:0] ascii_numero(
+    input logic [3:0] numero
+);
+
+    begin
+        ascii_numero = "0" + numero;
     end
 
+endfunction
 
-    // =========================================================
-    // CONTADOR DE RECEPCION SERIAL
-    // =========================================================
 
-    always_ff @(posedge clk or posedge rst) begin
+// =========================================================
+// INDICE DE LETRA
+// A = 0
+// B = 1
+// ...
+// Z = 25
+// =========================================================
 
-        if (rst) begin
+function automatic [4:0] indice_letra(
+    input logic [7:0] letra
+);
 
-            contador_baud_rx <= 16'd0;
-            bit_serial_rx <= 4'd0;
+    begin
+        indice_letra = letra - "A";
+    end
+
+endfunction
+
+
+// =========================================================
+// FUNCION PALABRA COMPLETA
+// =========================================================
+
+function automatic logic palabra_completa_func(
+    input logic [63:0] palabra,
+    input logic [3:0] cantidad
+);
+
+    begin
+
+        palabra_completa_func = 1'b1;
+
+        if (cantidad == 4'd0) begin
+
+            palabra_completa_func = 1'b0;
 
         end
 
         else begin
 
-            if (estado_actual == RECEPCION_SERIAL) begin
+            if (cantidad >= 4'd1)
+                if (!(
+                    palabra[63:56] >= "A" &&
+                    palabra[63:56] <= "Z"
+                ))
+                    palabra_completa_func = 1'b0;
 
-                if (contador_baud_rx == CICLOS_BAUD - 1) begin
 
-                    contador_baud_rx <= 16'd0;
+            if (cantidad >= 4'd2)
+                if (!(
+                    palabra[55:48] >= "A" &&
+                    palabra[55:48] <= "Z"
+                ))
+                    palabra_completa_func = 1'b0;
 
-                    if (bit_serial_rx == 4'd9)
-                        bit_serial_rx <= 4'd0;
 
-                    else
-                        bit_serial_rx <=
-                            bit_serial_rx + 1'b1;
+            if (cantidad >= 4'd3)
+                if (!(
+                    palabra[47:40] >= "A" &&
+                    palabra[47:40] <= "Z"
+                ))
+                    palabra_completa_func = 1'b0;
 
-                end
 
-                else begin
+            if (cantidad >= 4'd4)
+                if (!(
+                    palabra[39:32] >= "A" &&
+                    palabra[39:32] <= "Z"
+                ))
+                    palabra_completa_func = 1'b0;
 
-                    contador_baud_rx <=
-                        contador_baud_rx + 1'b1;
 
-                end
+            if (cantidad >= 4'd5)
+                if (!(
+                    palabra[31:24] >= "A" &&
+                    palabra[31:24] <= "Z"
+                ))
+                    palabra_completa_func = 1'b0;
 
-            end
 
-            else begin
+            if (cantidad >= 4'd6)
+                if (!(
+                    palabra[23:16] >= "A" &&
+                    palabra[23:16] <= "Z"
+                ))
+                    palabra_completa_func = 1'b0;
 
-                contador_baud_rx <= 16'd0;
-                bit_serial_rx <= 4'd0;
 
-            end
+            if (cantidad >= 4'd7)
+                if (!(
+                    palabra[15:8] >= "A" &&
+                    palabra[15:8] <= "Z"
+                ))
+                    palabra_completa_func = 1'b0;
+
+
+            if (cantidad >= 4'd8)
+                if (!(
+                    palabra[7:0] >= "A" &&
+                    palabra[7:0] <= "Z"
+                ))
+                    palabra_completa_func = 1'b0;
 
         end
 
     end
 
+endfunction
 
-    // =========================================================
-    // FSM PRINCIPAL DEL VALIDADOR
-    // =========================================================
 
-    always_ff @(posedge clk or posedge rst) begin
+// =========================================================
+// LETRA VALIDA
+// =========================================================
 
-        if (rst) begin
+always_comb begin
 
-            estado_actual <= ESPERA;
+    letra_valida = 1'b0;
 
-            palabra_oculta <= 64'b0;
-            palabra_nueva <= 64'b0;
-            palabra_estado <= 64'b0;
+    if (
+        letra_recibida >= "A" &&
+        letra_recibida <= "Z"
+    ) begin
 
-            letras_usadas <= 26'b0;
+        letra_valida = 1'b1;
 
-            fallos <= 5'd0;
+    end
 
-            letra_recibida <= 8'h00;
+end
 
-            letra_repetida <= 1'b0;
-            letra_correcta <= 1'b0;
 
-            indice_mensaje <= 8'd0;
-            longitud_mensaje <= 9'd0;
+// =========================================================
+// CALCULO DE PALABRA NUEVA
+// =========================================================
 
-            for (i = 0; i < 256; i = i + 1)
-                mensaje[i] <= 8'h00;
+always_comb begin
+
+    // Por defecto conserva la palabra actual
+    palabra_nueva = palabra_estado;
+
+
+    if (palabra_oculta[63:56] == letra_recibida)
+        palabra_nueva[63:56] = letra_recibida;
+
+    if (palabra_oculta[55:48] == letra_recibida)
+        palabra_nueva[55:48] = letra_recibida;
+
+    if (palabra_oculta[47:40] == letra_recibida)
+        palabra_nueva[47:40] = letra_recibida;
+
+    if (palabra_oculta[39:32] == letra_recibida)
+        palabra_nueva[39:32] = letra_recibida;
+
+    if (palabra_oculta[31:24] == letra_recibida)
+        palabra_nueva[31:24] = letra_recibida;
+
+    if (palabra_oculta[23:16] == letra_recibida)
+        palabra_nueva[23:16] = letra_recibida;
+
+    if (palabra_oculta[15:8] == letra_recibida)
+        palabra_nueva[15:8] = letra_recibida;
+
+    if (palabra_oculta[7:0] == letra_recibida)
+        palabra_nueva[7:0] = letra_recibida;
+
+end
+
+
+// =========================================================
+// RECEPTOR SERIAL
+// =========================================================
+
+always_ff @(posedge clk or posedge rst) begin
+
+    if (rst) begin
+
+        contador_baud_rx <= 16'd0;
+        bit_serial_rx    <= 4'd0;
+
+    end
+
+    else begin
+
+        if (estado_actual == RECEPCION_SERIAL) begin
+
+            if (contador_baud_rx == CICLOS_BAUD - 1) begin
+
+                contador_baud_rx <= 16'd0;
+
+                if (bit_serial_rx == 4'd9)
+                    bit_serial_rx <= 4'd0;
+
+                else
+                    bit_serial_rx <= bit_serial_rx + 1'b1;
+
+            end
+
+            else begin
+
+                contador_baud_rx <= contador_baud_rx + 1'b1;
+
+            end
+
+        end
+
+        else begin
+
+            contador_baud_rx <= 16'd0;
+            bit_serial_rx    <= 4'd0;
+
+        end
+
+    end
+
+end
+
+
+// =========================================================
+// FSM PRINCIPAL
+// =========================================================
+
+always_ff @(posedge clk or posedge rst) begin
+
+    if (rst) begin
+
+        estado_actual <= ESPERA;
+
+        palabra_oculta <= 64'b0;
+        palabra_estado <= 64'h2020202020202020;
+        palabra_final  <= 64'b0;
+
+        letras_usadas <= 26'b0;
+
+        fallos <= 5'd0;
+
+        letra_recibida <= 8'h00;
+
+        letra_repetida <= 1'b0;
+
+        letra_correcta_calculada <= 1'b0;
+
+        partida_terminada <= 1'b0;
+
+        resultado_final_victoria <= 1'b0;
+
+        resultado_final_timeout <= 1'b0;
+
+        letra_correcta <= 1'b0;
+        letra_incorrecta <= 1'b0;
+
+        indice_mensaje <= 8'd0;
+        longitud_mensaje <= 9'd0;
+
+        for (i = 0; i < 256; i = i + 1)
+            mensaje[i] <= 8'h00;
+
+    end
+
+    else begin
+
+        // =====================================================
+        // PULSOS DE RESULTADO
+        // =====================================================
+
+        letra_correcta   <= 1'b0;
+        letra_incorrecta <= 1'b0;
+
+
+        // =====================================================
+        // TIMEOUT
+        // =====================================================
+
+        if (
+            partida_activa &&
+            tiempo_agotado &&
+            !partida_terminada
+        ) begin
+
+            partida_terminada <= 1'b1;
+
+            resultado_final_victoria <= 1'b0;
+
+            resultado_final_timeout <= 1'b1;
+
+            palabra_final <= palabra_oculta;
+
+            estado_actual <= PREPARAR_FINAL;
 
         end
 
         else begin
 
             case (estado_actual)
+
 
                 // =================================================
                 // ESPERA
@@ -236,6 +442,35 @@ module Validador_Letra (
                 ESPERA: begin
 
                     if (partida_iniciada) begin
+
+                        /*
+                         * MUY IMPORTANTE:
+                         *
+                         * Aquí limpiamos todo lo perteneciente
+                         * a la partida anterior.
+                         */
+
+                        palabra_oculta <= 64'b0;
+
+                        palabra_estado <= 64'h2020202020202020;
+
+                        palabra_final <= 64'b0;
+
+                        letras_usadas <= 26'b0;
+
+                        fallos <= 5'd0;
+
+                        letra_recibida <= 8'h00;
+
+                        letra_repetida <= 1'b0;
+
+                        letra_correcta_calculada <= 1'b0;
+
+                        partida_terminada <= 1'b0;
+
+                        resultado_final_victoria <= 1'b0;
+
+                        resultado_final_timeout <= 1'b0;
 
                         estado_actual <= INICIALIZAR;
 
@@ -250,38 +485,71 @@ module Validador_Letra (
 
                 INICIALIZAR: begin
 
+                    /*
+                     * Capturamos la nueva palabra.
+                     *
+                     * Esto ocurre un ciclo después de
+                     * partida_iniciada, por lo que el Selector_palabra
+                     * ya tuvo tiempo de actualizar palabra_actual.
+                     */
+
                     palabra_oculta <= palabra_actual;
 
                     letras_usadas <= 26'b0;
+
                     fallos <= 5'd0;
 
-                    palabra_nueva = 64'h2020202020202020;
+                    partida_terminada <= 1'b0;
 
-                    if (cantidad_letras >= 4'd1)
-                        palabra_nueva[63:56] = 8'h5F;
+                    resultado_final_victoria <= 1'b0;
 
-                    if (cantidad_letras >= 4'd2)
-                        palabra_nueva[55:48] = 8'h5F;
+                    resultado_final_timeout <= 1'b0;
 
-                    if (cantidad_letras >= 4'd3)
-                        palabra_nueva[47:40] = 8'h5F;
 
-                    if (cantidad_letras >= 4'd4)
-                        palabra_nueva[39:32] = 8'h5F;
+                    // =============================================
+                    // CREAR PALABRA OCULTA
+                    // =============================================
 
-                    if (cantidad_letras >= 4'd5)
-                        palabra_nueva[31:24] = 8'h5F;
+                    case (cantidad_letras)
 
-                    if (cantidad_letras >= 4'd6)
-                        palabra_nueva[23:16] = 8'h5F;
+                        4'd1:
+                            palabra_estado <=
+                                64'h5F20202020202020;
 
-                    if (cantidad_letras >= 4'd7)
-                        palabra_nueva[15:8] = 8'h5F;
+                        4'd2:
+                            palabra_estado <=
+                                64'h5F5F202020202020;
 
-                    if (cantidad_letras >= 4'd8)
-                        palabra_nueva[7:0] = 8'h5F;
+                        4'd3:
+                            palabra_estado <=
+                                64'h5F5F5F2020202020;
 
-                    palabra_estado <= palabra_nueva;
+                        4'd4:
+                            palabra_estado <=
+                                64'h5F5F5F5F20202020;
+
+                        4'd5:
+                            palabra_estado <=
+                                64'h5F5F5F5F5F202020;
+
+                        4'd6:
+                            palabra_estado <=
+                                64'h5F5F5F5F5F5F2020;
+
+                        4'd7:
+                            palabra_estado <=
+                                64'h5F5F5F5F5F5F5F20;
+
+                        4'd8:
+                            palabra_estado <=
+                                64'h5F5F5F5F5F5F5F5F;
+
+                        default:
+                            palabra_estado <=
+                                64'h2020202020202020;
+
+                    endcase
+
 
                     estado_actual <= PREPARAR_INICIO;
 
@@ -289,7 +557,7 @@ module Validador_Letra (
 
 
                 // =================================================
-                // PREPARAR MENSAJE DE INICIO
+                // PREPARAR MENSAJE START
                 // =================================================
 
                 PREPARAR_INICIO: begin
@@ -306,8 +574,7 @@ module Validador_Letra (
                     mensaje[8]  <= "N";
                     mensaje[9]  <= "=";
 
-                    mensaje[10] <=
-                        ascii_numero(cantidad_letras);
+                    mensaje[10] <= ascii_numero(cantidad_letras);
 
                     mensaje[11] <= ",";
 
@@ -344,6 +611,7 @@ module Validador_Letra (
 
                     end
 
+
                     indice_mensaje <= 8'd0;
 
                     estado_actual <= ENVIAR_BYTE;
@@ -352,35 +620,40 @@ module Validador_Letra (
 
 
                 // =================================================
-                // LEER CONTROL
+                // LEER CONTROL UART
                 // =================================================
 
                 LEER_CONTROL: begin
 
-                    // RX listo
-                    if (rdata[1]) begin
-
-                        estado_actual <= LEER_DATO;
-
-                    end
-
-                    // Fin de partida
-                    else if (!partida_activa) begin
+                    if (partida_terminada) begin
 
                         estado_actual <= PREPARAR_FINAL;
 
                     end
 
-                    // Nueva recepción física
+                    else if (rdata[1]) begin
+
+                        estado_actual <= LEER_DATO;
+
+                    end
+
+                    else if (!partida_activa) begin
+
+                        estado_actual <= ESPERA;
+
+                    end
+
                     else if (!rx_fisico) begin
+
                         estado_actual <= RECEPCION_SERIAL;
+
                     end
 
                 end
 
 
                 // =================================================
-                // LEER DATO
+                // LEER DATO UART
                 // =================================================
 
                 LEER_DATO: begin
@@ -398,8 +671,10 @@ module Validador_Letra (
 
                 RECEPCION_SERIAL: begin
 
-                    if ((bit_serial_rx == 4'd9) &&
-                        (contador_baud_rx == CICLOS_BAUD - 1)) begin
+                    if (
+                        bit_serial_rx == 4'd9 &&
+                        contador_baud_rx == CICLOS_BAUD - 1
+                    ) begin
 
                         estado_actual <= LEER_CONTROL;
 
@@ -409,7 +684,7 @@ module Validador_Letra (
 
 
                 // =================================================
-                // VALIDAR
+                // VALIDAR LETRA
                 // =================================================
 
                 VALIDAR: begin
@@ -417,24 +692,28 @@ module Validador_Letra (
                     if (!letra_valida) begin
 
                         letra_repetida <= 1'b0;
-                        letra_correcta <= 1'b0;
 
-                        estado_actual <= LIMPIAR_RX;
+                        letra_correcta_calculada <= 1'b0;
 
                     end
 
                     else begin
+
+                        // -----------------------------------------
+                        // Verificar si ya fue utilizada
+                        // -----------------------------------------
 
                         letra_repetida <=
                             letras_usadas[
                                 indice_letra(letra_recibida)
                             ];
 
-                        letras_usadas[
-                            indice_letra(letra_recibida)
-                        ] <= 1'b1;
 
-                        letra_correcta <=
+                        // -----------------------------------------
+                        // Verificar si pertenece a la palabra
+                        // -----------------------------------------
+
+                        letra_correcta_calculada <=
                             (palabra_oculta[63:56] == letra_recibida) ||
                             (palabra_oculta[55:48] == letra_recibida) ||
                             (palabra_oculta[47:40] == letra_recibida) ||
@@ -444,61 +723,160 @@ module Validador_Letra (
                             (palabra_oculta[15:8]  == letra_recibida) ||
                             (palabra_oculta[7:0]   == letra_recibida);
 
-                        estado_actual <= ACTUALIZAR;
+
+                        // -----------------------------------------
+                        // Registrar letra utilizada
+                        // -----------------------------------------
+
+                        if (
+                            !letras_usadas[
+                                indice_letra(letra_recibida)
+                            ]
+                        ) begin
+
+                            letras_usadas[
+                                indice_letra(letra_recibida)
+                            ] <= 1'b1;
+
+                        end
 
                     end
+
+
+                    estado_actual <= ACTUALIZAR;
 
                 end
 
 
                 // =================================================
-                // ACTUALIZAR PALABRA
+                // ACTUALIZAR
                 // =================================================
 
                 ACTUALIZAR: begin
 
-                    palabra_nueva = palabra_estado;
-
-                    if (palabra_oculta[63:56] == letra_recibida)
-                        palabra_nueva[63:56] = letra_recibida;
-
-                    if (palabra_oculta[55:48] == letra_recibida)
-                        palabra_nueva[55:48] = letra_recibida;
-
-                    if (palabra_oculta[47:40] == letra_recibida)
-                        palabra_nueva[47:40] = letra_recibida;
-
-                    if (palabra_oculta[39:32] == letra_recibida)
-                        palabra_nueva[39:32] = letra_recibida;
-
-                    if (palabra_oculta[31:24] == letra_recibida)
-                        palabra_nueva[31:24] = letra_recibida;
-
-                    if (palabra_oculta[23:16] == letra_recibida)
-                        palabra_nueva[23:16] = letra_recibida;
-
-                    if (palabra_oculta[15:8] == letra_recibida)
-                        palabra_nueva[15:8] = letra_recibida;
-
-                    if (palabra_oculta[7:0] == letra_recibida)
-                        palabra_nueva[7:0] = letra_recibida;
+                    /*
+                     * Actualizamos la palabra mostrada.
+                     */
 
                     palabra_estado <= palabra_nueva;
 
-                    // -----------------------------------------
-                    // CONTADOR DE FALLOS
-                    // -----------------------------------------
 
-                    if (!letra_repetida &&
-                        !letra_correcta)
-                    begin
-                        if (fallos < 5'd31)
+                    // =================================================
+                    // LETRA INCORRECTA NUEVA
+                    // =================================================
+
+                    if (
+                        !letra_repetida &&
+                        !letra_correcta_calculada
+                    ) begin
+
+                        /*
+                         * El límite es 6 fallos.
+                         */
+
+                        if (fallos < 5'd6)
                             fallos <= fallos + 1'b1;
-                    end
-
-                    estado_actual <= LIMPIAR_RX;
 
                     end
+
+
+                    // =================================================
+                    // VICTORIA
+                    // =================================================
+
+                    if (
+                        !letra_repetida &&
+                        letra_correcta_calculada &&
+                        palabra_completa_func(
+                            palabra_nueva,
+                            cantidad_letras
+                        )
+                    ) begin
+
+                        /*
+                         * Guardamos la palabra COMPLETA.
+                         */
+
+                        palabra_final <= palabra_nueva;
+
+                        partida_terminada <= 1'b1;
+
+                        resultado_final_victoria <= 1'b1;
+
+                        resultado_final_timeout <= 1'b0;
+
+                        letra_correcta <= 1'b0;
+                        letra_incorrecta <= 1'b0;
+
+                        estado_actual <= LIMPIAR_RX;
+
+                    end
+
+
+                    // =================================================
+                    // DERROTA
+                    // =================================================
+
+                    else if (
+                        !letra_repetida &&
+                        !letra_correcta_calculada &&
+                        (fallos >= 5'd5)
+                    ) begin
+
+                        /*
+                         * Este es el SEXTO fallo:
+                         *
+                         * antes de esta instrucción fallos = 5
+                         * después de ella fallos = 6
+                         *
+                         * Por eso usamos fallos >= 5 aquí.
+                         */
+
+                        palabra_final <= palabra_oculta;
+
+                        partida_terminada <= 1'b1;
+
+                        resultado_final_victoria <= 1'b0;
+
+                        resultado_final_timeout <= 1'b0;
+
+                        letra_correcta <= 1'b0;
+                        letra_incorrecta <= 1'b0;
+
+                        estado_actual <= LIMPIAR_RX;
+
+                    end
+
+
+                    // =================================================
+                    // JUGADA NORMAL
+                    // =================================================
+
+                    else begin
+
+                        if (
+                            !letra_repetida &&
+                            letra_correcta_calculada
+                        ) begin
+
+                            letra_correcta <= 1'b1;
+
+                        end
+
+                        else if (
+                            !letra_repetida &&
+                            !letra_correcta_calculada
+                        ) begin
+
+                            letra_incorrecta <= 1'b1;
+
+                        end
+
+                        estado_actual <= LIMPIAR_RX;
+
+                    end
+
+                end
 
 
                 // =================================================
@@ -507,17 +885,29 @@ module Validador_Letra (
 
                 LIMPIAR_RX: begin
 
-                    if (partida_activa)
+                    if (partida_terminada) begin
+
+                        estado_actual <= PREPARAR_FINAL;
+
+                    end
+
+                    else if (partida_activa) begin
+
                         estado_actual <= PREPARAR_RESULTADO;
 
-                    else
-                        estado_actual <= PREPARAR_FINAL;
+                    end
+
+                    else begin
+
+                        estado_actual <= ESPERA;
+
+                    end
 
                 end
 
 
                 // =================================================
-                // PREPARAR RESULTADO
+                // PREPARAR RESULTADO NORMAL
                 // =================================================
 
                 PREPARAR_RESULTADO: begin
@@ -530,6 +920,10 @@ module Validador_Letra (
                     mensaje[5] <= "T";
                     mensaje[6] <= ",";
 
+
+                    // =================================================
+                    // REPETIDA
+                    // =================================================
 
                     if (letra_repetida) begin
 
@@ -563,15 +957,18 @@ module Validador_Letra (
                         if (fallos >= 6)
                             mensaje[30] <= "0";
                         else
-                            mensaje[30] <=
-                                ascii_numero(6 - fallos);
+                            mensaje[30] <= ascii_numero(6 - fallos);
 
                         longitud_mensaje <= 9'd31;
 
                     end
 
 
-                    else if (letra_correcta) begin
+                    // =================================================
+                    // CORRECTA
+                    // =================================================
+
+                    else if (letra_correcta_calculada) begin
 
                         mensaje[7]  <= "O";
                         mensaje[8]  <= "K";
@@ -604,13 +1001,16 @@ module Validador_Letra (
                         if (fallos >= 6)
                             mensaje[31] <= "0";
                         else
-                            mensaje[31] <=
-                                ascii_numero(6 - fallos);
+                            mensaje[31] <= ascii_numero(6 - fallos);
 
                         longitud_mensaje <= 9'd32;
 
                     end
 
+
+                    // =================================================
+                    // INCORRECTA
+                    // =================================================
 
                     else begin
 
@@ -646,8 +1046,7 @@ module Validador_Letra (
                         if (fallos >= 6)
                             mensaje[32] <= "0";
                         else
-                            mensaje[32] <=
-                                ascii_numero(6 - fallos);
+                            mensaje[32] <= ascii_numero(6 - fallos);
 
                         longitud_mensaje <= 9'd33;
 
@@ -667,7 +1066,11 @@ module Validador_Letra (
 
                 PREPARAR_FINAL: begin
 
-                    if (victoria) begin
+                    // =================================================
+                    // TIMEOUT
+                    // =================================================
+
+                    if (resultado_final_timeout) begin
 
                         mensaje[0] <= "F";
                         mensaje[1] <= "I";
@@ -675,57 +1078,114 @@ module Validador_Letra (
                         mensaje[3] <= "A";
                         mensaje[4] <= "L";
                         mensaje[5] <= ",";
-                        mensaje[6] <= "W";
-                        mensaje[7] <= "I";
-                        mensaje[8] <= "N";
-                        mensaje[9] <= ",";
 
-                        mensaje[10] <= palabra_actual[63:56];
-                        mensaje[11] <= palabra_actual[55:48];
-                        mensaje[12] <= palabra_actual[47:40];
-                        mensaje[13] <= palabra_actual[39:32];
-                        mensaje[14] <= palabra_actual[31:24];
-                        mensaje[15] <= palabra_actual[23:16];
-                        mensaje[16] <= palabra_actual[15:8];
-                        mensaje[17] <= palabra_actual[7:0];
-
-                        longitud_mensaje <= 9'd18;
-
-                    end
-
-
-                    else if (tiempo_agotado) begin
-
-                        mensaje[0] <= "F";
-                        mensaje[1] <= "I";
-                        mensaje[2] <= "N";
-                        mensaje[3] <= "A";
-                        mensaje[4] <= "L";
-                        mensaje[5] <= ",";
                         mensaje[6] <= "L";
                         mensaje[7] <= "O";
                         mensaje[8] <= "S";
                         mensaje[9] <= "E";
                         mensaje[10] <= ",";
+
                         mensaje[11] <= "T";
                         mensaje[12] <= "I";
                         mensaje[13] <= "M";
                         mensaje[14] <= "E";
                         mensaje[15] <= ",";
 
-                        mensaje[16] <= palabra_actual[63:56];
-                        mensaje[17] <= palabra_actual[55:48];
-                        mensaje[18] <= palabra_actual[47:40];
-                        mensaje[19] <= palabra_actual[39:32];
-                        mensaje[20] <= palabra_actual[31:24];
-                        mensaje[21] <= palabra_actual[23:16];
-                        mensaje[22] <= palabra_actual[15:8];
-                        mensaje[23] <= palabra_actual[7:0];
+                        mensaje[16] <= palabra_final[63:56];
+                        mensaje[17] <= palabra_final[55:48];
+                        mensaje[18] <= palabra_final[47:40];
+                        mensaje[19] <= palabra_final[39:32];
+                        mensaje[20] <= palabra_final[31:24];
+                        mensaje[21] <= palabra_final[23:16];
+                        mensaje[22] <= palabra_final[15:8];
+                        mensaje[23] <= palabra_final[7:0];
 
                         longitud_mensaje <= 9'd24;
 
                     end
 
+
+                    // =================================================
+                    // VICTORIA
+                    // =================================================
+
+                    else if (
+                        partida_terminada &&
+                        resultado_final_victoria
+                    ) begin
+
+                        mensaje[0] <= "F";
+                        mensaje[1] <= "I";
+                        mensaje[2] <= "N";
+                        mensaje[3] <= "A";
+                        mensaje[4] <= "L";
+                        mensaje[5] <= ",";
+
+                        mensaje[6] <= "W";
+                        mensaje[7] <= "I";
+                        mensaje[8] <= "N";
+                        mensaje[9] <= ",";
+
+                        mensaje[10] <= palabra_final[63:56];
+                        mensaje[11] <= palabra_final[55:48];
+                        mensaje[12] <= palabra_final[47:40];
+                        mensaje[13] <= palabra_final[39:32];
+                        mensaje[14] <= palabra_final[31:24];
+                        mensaje[15] <= palabra_final[23:16];
+                        mensaje[16] <= palabra_final[15:8];
+                        mensaje[17] <= palabra_final[7:0];
+
+                        longitud_mensaje <= 9'd18;
+
+                    end
+
+
+                    // =================================================
+                    // DERROTA
+                    // =================================================
+
+                    else if (
+                        partida_terminada &&
+                        !resultado_final_victoria
+                    ) begin
+
+                        mensaje[0] <= "F";
+                        mensaje[1] <= "I";
+                        mensaje[2] <= "N";
+                        mensaje[3] <= "A";
+                        mensaje[4] <= "L";
+                        mensaje[5] <= ",";
+
+                        mensaje[6] <= "L";
+                        mensaje[7] <= "O";
+                        mensaje[8] <= "S";
+                        mensaje[9] <= "E";
+                        mensaje[10] <= ",";
+
+                        mensaje[11] <= "F";
+                        mensaje[12] <= "A";
+                        mensaje[13] <= "I";
+                        mensaje[14] <= "L";
+                        mensaje[15] <= "S";
+                        mensaje[16] <= ",";
+
+                        mensaje[17] <= palabra_final[63:56];
+                        mensaje[18] <= palabra_final[55:48];
+                        mensaje[19] <= palabra_final[47:40];
+                        mensaje[20] <= palabra_final[39:32];
+                        mensaje[21] <= palabra_final[31:24];
+                        mensaje[22] <= palabra_final[23:16];
+                        mensaje[23] <= palabra_final[15:8];
+                        mensaje[24] <= palabra_final[7:0];
+
+                        longitud_mensaje <= 9'd25;
+
+                    end
+
+
+                    // =================================================
+                    // RESPALDO
+                    // =================================================
 
                     else begin
 
@@ -735,11 +1195,13 @@ module Validador_Letra (
                         mensaje[3] <= "A";
                         mensaje[4] <= "L";
                         mensaje[5] <= ",";
+
                         mensaje[6] <= "L";
                         mensaje[7] <= "O";
                         mensaje[8] <= "S";
                         mensaje[9] <= "E";
                         mensaje[10] <= ",";
+
                         mensaje[11] <= "F";
                         mensaje[12] <= "A";
                         mensaje[13] <= "I";
@@ -759,6 +1221,7 @@ module Validador_Letra (
                         longitud_mensaje <= 9'd25;
 
                     end
+
 
                     indice_mensaje <= 8'd0;
 
@@ -784,11 +1247,12 @@ module Validador_Letra (
 
                 ESPERAR_TX: begin
 
-                    // UART terminó el byte actual
                     if (!rdata[0]) begin
 
-                        if ((indice_mensaje + 1'b1) <
-                            longitud_mensaje) begin
+                        if (
+                            (indice_mensaje + 1'b1) <
+                            longitud_mensaje
+                        ) begin
 
                             indice_mensaje <=
                                 indice_mensaje + 1'b1;
@@ -799,11 +1263,30 @@ module Validador_Letra (
 
                         else begin
 
-                            if (partida_activa)
+                            if (partida_terminada) begin
+
+                                /*
+                                 * El resultado final ya fue
+                                 * transmitido. El FSM principal
+                                 * se encarga de mantener FINALIZADO
+                                 * durante los 2 segundos.
+                                 */
+
+                                estado_actual <= ESPERA;
+
+                            end
+
+                            else if (partida_activa) begin
+
                                 estado_actual <= LEER_CONTROL;
 
-                            else
+                            end
+
+                            else begin
+
                                 estado_actual <= ESPERA;
+
+                            end
 
                         end
 
@@ -828,141 +1311,146 @@ module Validador_Letra (
 
     end
 
-
-    // =========================================================
-    // BUS HACIA UART
-    // =========================================================
-
-    always_comb begin
-
-        write_enable = 1'b0;
-        addr = 2'b00;
-        wdata = 32'b0;
+end
 
 
-        case (estado_actual)
+// =========================================================
+// BUS UART
+// =========================================================
 
-            // -----------------------------------------------
-            // LEER STATUS
-            // -----------------------------------------------
+always_comb begin
 
-            LEER_CONTROL: begin
+    write_enable = 1'b0;
 
-                write_enable = 1'b0;
-                addr = 2'b10;
+    addr = 2'b00;
 
-            end
-
-
-            // -----------------------------------------------
-            // LEER RX
-            // -----------------------------------------------
-
-            LEER_DATO: begin
-
-                write_enable = 1'b0;
-                addr = 2'b01;
-
-            end
+    wdata = 32'b0;
 
 
-            // -----------------------------------------------
-            // RECEPCION FISICA
-            // -----------------------------------------------
-
-            RECEPCION_SERIAL: begin
-
-                addr = 2'b01;
-
-                // Muestrear en el centro del bit
-                if (contador_baud_rx == MEDIO_BAUD) begin
-
-                    write_enable = 1'b1;
-
-                    wdata = 32'b0;
-
-                    wdata[0] = rx_fisico;
-
-                end
-
-            end
+    case (estado_actual)
 
 
-            // -----------------------------------------------
-            // LIMPIAR RX
-            // -----------------------------------------------
+        // =====================================================
+        // LEER CONTROL
+        // =====================================================
 
-            LIMPIAR_RX: begin
+        LEER_CONTROL: begin
+
+            write_enable = 1'b0;
+
+            addr = 2'b10;
+
+        end
+
+
+        // =====================================================
+        // LEER DATO
+        // =====================================================
+
+        LEER_DATO: begin
+
+            write_enable = 1'b0;
+
+            addr = 2'b01;
+
+        end
+
+
+        // =====================================================
+        // RECEPCION SERIAL
+        // =====================================================
+
+        RECEPCION_SERIAL: begin
+
+            addr = 2'b01;
+
+            if (contador_baud_rx == MEDIO_BAUD) begin
 
                 write_enable = 1'b1;
-
-                addr = 2'b10;
-
-                wdata = 32'h00000002;
-
-            end
-
-
-            // -----------------------------------------------
-            // ENVIAR BYTE
-            // -----------------------------------------------
-
-            ENVIAR_BYTE: begin
-
-                write_enable = 1'b1;
-
-                addr = 2'b00;
-
-                wdata = {
-                    24'b0,
-                    mensaje[indice_mensaje]
-                };
-
-            end
-
-
-            // -----------------------------------------------
-            // ESPERAR TX
-            // -----------------------------------------------
-
-            ESPERAR_TX: begin
-
-                write_enable = 1'b0;
-
-                addr = 2'b10;
-
-            end
-
-
-            default: begin
-
-                write_enable = 1'b0;
-
-                addr = 2'b00;
 
                 wdata = 32'b0;
 
+                wdata[0] = rx_fisico;
+
             end
 
-        endcase
-
-    end
+        end
 
 
-    // =========================================================
-    // TX FISICO
-    // =========================================================
+        // =====================================================
+        // LIMPIAR RX
+        // =====================================================
 
-    always_comb begin
+        LIMPIAR_RX: begin
 
-        if (estado_actual == ESPERAR_TX)
+            write_enable = 1'b1;
 
-            tx_fisico = rdata[2];
+            addr = 2'b10;
 
-        else
+            wdata = 32'h00000002;
 
-            tx_fisico = 1'b1;
+        end
 
-    end
+
+        // =====================================================
+        // ENVIAR BYTE
+        // =====================================================
+
+        ENVIAR_BYTE: begin
+
+            write_enable = 1'b1;
+
+            addr = 2'b00;
+
+            wdata = {
+                24'b0,
+                mensaje[indice_mensaje]
+            };
+
+        end
+
+
+        // =====================================================
+        // ESPERAR TX
+        // =====================================================
+
+        ESPERAR_TX: begin
+
+            write_enable = 1'b0;
+
+            addr = 2'b10;
+
+        end
+
+
+        default: begin
+
+            write_enable = 1'b0;
+
+            addr = 2'b00;
+
+            wdata = 32'b0;
+
+        end
+
+    endcase
+
+end
+
+
+// =========================================================
+// TX FISICO
+// =========================================================
+
+always_comb begin
+
+    if (estado_actual == ESPERAR_TX)
+        tx_fisico = rdata[2];
+
+    else
+        tx_fisico = 1'b1;
+
+end
+
 
 endmodule

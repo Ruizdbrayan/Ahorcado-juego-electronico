@@ -17,52 +17,114 @@ module Temporizador #(
     output logic timeout
 );
 
-    localparam integer CICLOS_SEGUNDO =
-        FRECUENCIA_RELOJ;
 
-    logic [26:0] contador_segundo;
+// =========================================================
+// PARAMETROS
+// =========================================================
 
-    logic [7:0] tiempo_restante;
+localparam integer CICLOS_SEGUNDO =
+    FRECUENCIA_RELOJ;
 
-    always_ff @(posedge clk or posedge rst) begin
 
-        if (rst) begin
+// =========================================================
+// REGISTROS
+// =========================================================
+
+logic [26:0] contador_segundo;
+
+logic [7:0] tiempo_restante;
+
+
+// =========================================================
+// TEMPORIZADOR
+// =========================================================
+
+always_ff @(posedge clk or posedge rst) begin
+
+    if (rst) begin
+
+        contador_segundo <= 27'd0;
+
+        tiempo_restante <= 8'd0;
+
+        timeout <= 1'b0;
+
+    end
+
+    else begin
+
+        // =====================================================
+        // FUERA DE PARTIDA
+        // =====================================================
+
+        if (!partida_activa) begin
 
             contador_segundo <= 27'd0;
 
-            tiempo_restante <= 8'd0;
-
             timeout <= 1'b0;
 
-        end else if (!partida_activa) begin
-
-            contador_segundo <= 27'd0;
-
-            timeout <= 1'b0;
 
             if (dificultad)
                 tiempo_restante <= 8'd90;
+
             else
                 tiempo_restante <= 8'd120;
 
-        end else if (victoria || derrota) begin
+        end
+
+
+        // =====================================================
+        // PARTIDA FINALIZADA
+        // =====================================================
+
+        else if (victoria || derrota) begin
 
             contador_segundo <= contador_segundo;
+
             tiempo_restante <= tiempo_restante;
 
             timeout <= 1'b0;
 
-        end else begin
+        end
 
-            if (contador_segundo == CICLOS_SEGUNDO - 1) begin
+
+        // =====================================================
+        // PARTIDA ACTIVA
+        // =====================================================
+
+        else begin
+
+            // -----------------------------------------------
+            // Segundo transcurrido
+            // -----------------------------------------------
+
+            if (
+                contador_segundo ==
+                CICLOS_SEGUNDO - 1
+            ) begin
 
                 contador_segundo <= 27'd0;
 
+
+                // -------------------------------------------
+                // Todavía queda tiempo
+                // -------------------------------------------
+
                 if (tiempo_restante > 1) begin
 
-                    tiempo_restante <= tiempo_restante - 1'b1;
+                    tiempo_restante <=
+                        tiempo_restante - 1'b1;
 
-                end else begin
+                    timeout <= 1'b0;
+
+                end
+
+
+                // -------------------------------------------
+                // Llegó a cero
+                // -------------------------------------------
+
+                else begin
 
                     tiempo_restante <= 8'd0;
 
@@ -70,9 +132,14 @@ module Temporizador #(
 
                 end
 
-            end else begin
+            end
 
-                contador_segundo <= contador_segundo + 1'b1;
+            else begin
+
+                contador_segundo <=
+                    contador_segundo + 1'b1;
+
+                timeout <= 1'b0;
 
             end
 
@@ -80,16 +147,24 @@ module Temporizador #(
 
     end
 
-    always_comb begin
+end
 
-        centenas = tiempo_restante / 100;
 
-        decenas =
-            (tiempo_restante % 100) / 10;
+// =========================================================
+// DISPLAY BCD
+// =========================================================
 
-        unidades =
-            tiempo_restante % 10;
+always_comb begin
 
-    end
+    centenas =
+        tiempo_restante / 100;
+
+    decenas =
+        (tiempo_restante % 100) / 10;
+
+    unidades =
+        tiempo_restante % 10;
+
+end
 
 endmodule
