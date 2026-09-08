@@ -280,7 +280,7 @@ module TOP_AHORCADO (
     // ============================================================
     // CONTROLADOR LCD
     // ============================================================
-
+    
     Controlador_LCD controlador_lcd (
         .clk             (clk),
         .rst             (rst),
