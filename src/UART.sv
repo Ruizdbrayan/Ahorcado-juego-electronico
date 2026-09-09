@@ -1,91 +1,94 @@
 module UART #(
     parameter integer FRECUENCIA_RELOJ = 100_000_000,
-    parameter integer BAUDRATE = 115_200
+    parameter integer BAUDRATE        = 115_200
 )(
     input  logic        clk,
     input  logic        rst,
 
+    // =========================================================
+    // INTERFAZ ESTANDAR DEL PERIFERICO
+    // =========================================================
+
     input  logic        write_enable,
     input  logic [1:0]  addr,
     input  logic [31:0] wdata,
+    output logic [31:0] rdata,
 
-    output logic [31:0] rdata
+    // =========================================================
+    // INTERFAZ FISICA UART
+    // =========================================================
+
+    input  logic        rx_fisico,
+    output logic        tx_fisico
 );
+
+    // =========================================================
+    // PARAMETROS
+    // =========================================================
 
     localparam integer CICLOS_BAUD =
         FRECUENCIA_RELOJ / BAUDRATE;
 
+    localparam integer MEDIO_BAUD =
+        CICLOS_BAUD / 2;
+
+
     // =========================================================
-    // REGISTROS DE DATOS
+    // REGISTROS
     // =========================================================
 
-    logic [31:0] registro_tx;
-    logic [31:0] registro_rx;
+    logic [7:0] registro_tx;
+    logic [7:0] registro_rx;
 
     logic tx_pendiente;
     logic rx_recibido;
 
+
     // =========================================================
-    // TRANSMISOR UART
+    // TRANSMISOR
     // =========================================================
 
-    logic [9:0] registro_desplazamiento_tx;
+    logic [9:0] registro_tx_serial;
     logic [3:0] bit_tx;
-    logic [15:0] contador_baud_tx;
-
+    logic [31:0] contador_tx;
     logic tx_activo;
-    logic tx_bit;
+
 
     // =========================================================
-    // RECEPTOR UART
+    // RECEPTOR
     // =========================================================
 
-    logic [7:0] registro_desplazamiento_rx;
+    logic [7:0] registro_rx_serial;
     logic [3:0] bit_rx;
+    logic [31:0] contador_rx;
     logic rx_activo;
 
+    logic rx_sync1;
+    logic rx_sync2;
+
+
     // =========================================================
-    // MAPA DE REGISTROS
-    //
-    // 00 -> TX DATA
-    // 01 -> RX DATA
-    // 10 -> STATUS
-    //
-    // STATUS:
-    // bit 0 = TX pendiente
-    // bit 1 = RX recibido
-    // bit 2 = TX serial
+    // SINCRONIZADOR RX
     // =========================================================
 
-    always_comb begin
+    always_ff @(posedge clk or posedge rst) begin
 
-        case (addr)
+        if (rst) begin
 
-            2'b00: begin
-                rdata = registro_tx;
-            end
+            rx_sync1 <= 1'b1;
+            rx_sync2 <= 1'b1;
 
-            2'b01: begin
-                rdata = registro_rx;
-            end
+        end
 
-            2'b10: begin
+        else begin
 
-                rdata = 32'b0;
+            rx_sync1 <= rx_fisico;
+            rx_sync2 <= rx_sync1;
 
-                rdata[0] = tx_pendiente;
-                rdata[1] = rx_recibido;
-                rdata[2] = tx_bit;
-
-            end
-
-            default: begin
-                rdata = 32'b0;
-            end
-
-        endcase
+        end
 
     end
+
 
     // =========================================================
     // LOGICA PRINCIPAL
@@ -95,174 +98,145 @@ module UART #(
 
         if (rst) begin
 
-            registro_tx <= 32'b0;
-            registro_rx <= 32'b0;
+            // -------------------------------------------------
+            // REGISTROS
+            // -------------------------------------------------
+
+            registro_tx <= 8'h00;
+            registro_rx <= 8'h00;
 
             tx_pendiente <= 1'b0;
-            rx_recibido <= 1'b0;
+            rx_recibido  <= 1'b0;
 
-            registro_desplazamiento_tx <= 10'b1111111111;
-            bit_tx <= 4'd0;
-            contador_baud_tx <= 16'd0;
 
-            tx_activo <= 1'b0;
-            tx_bit <= 1'b1;
+            // -------------------------------------------------
+            // TX
+            // -------------------------------------------------
 
-            registro_desplazamiento_rx <= 8'b0;
-            bit_rx <= 4'd0;
-            rx_activo <= 1'b0;
+            registro_tx_serial <= 10'b1111111111;
+
+            bit_tx      <= 4'd0;
+            contador_tx <= 32'd0;
+            tx_activo   <= 1'b0;
+
+
+            // -------------------------------------------------
+            // RX
+            // -------------------------------------------------
+
+            registro_rx_serial <= 8'h00;
+
+            bit_rx      <= 4'd0;
+            contador_rx <= 32'd0;
+            rx_activo   <= 1'b0;
 
         end
 
         else begin
 
             // =================================================
-            // ACCESO AL BUS
+            // ESCRITURAS DEL BUS
             // =================================================
 
             if (write_enable) begin
 
                 case (addr)
 
-                    // =========================================
+                    // -------------------------------------------------
                     // TX DATA
-                    // =========================================
+                    // -------------------------------------------------
 
                     2'b00: begin
 
-                        registro_tx <= wdata;
-
-                        // Solo aceptar un nuevo byte cuando
-                        // el transmisor esté libre.
-                        if (!tx_activo) begin
-
-                            registro_desplazamiento_tx[0] <= 1'b0;
-
-                            registro_desplazamiento_tx[1] <= wdata[0];
-                            registro_desplazamiento_tx[2] <= wdata[1];
-                            registro_desplazamiento_tx[3] <= wdata[2];
-                            registro_desplazamiento_tx[4] <= wdata[3];
-                            registro_desplazamiento_tx[5] <= wdata[4];
-                            registro_desplazamiento_tx[6] <= wdata[5];
-                            registro_desplazamiento_tx[7] <= wdata[6];
-                            registro_desplazamiento_tx[8] <= wdata[7];
-
-                            registro_desplazamiento_tx[9] <= 1'b1;
-
-                            bit_tx <= 4'd0;
-                            contador_baud_tx <= 16'd0;
-
-                            tx_activo <= 1'b1;
-                            tx_pendiente <= 1'b1;
-
-                            tx_bit <= 1'b0;
-
-                        end
+                        registro_tx <= wdata[7:0];
 
                     end
 
-                    // =========================================
+
+                    // -------------------------------------------------
                     // RX DATA
-                    // =========================================
+                    // -------------------------------------------------
 
                     2'b01: begin
 
-                        if (!rx_activo) begin
-
-                            // Inicio de recepción
-                            if (wdata[0] == 1'b0) begin
-
-                                rx_activo <= 1'b1;
-                                bit_rx <= 4'd0;
-                                registro_desplazamiento_rx <= 8'b0;
-
-                            end
-
-                        end
-
-                        else begin
-
-                            // ---------------------------------
-                            // BITS DE DATOS
-                            // ---------------------------------
-
-                            if (bit_rx < 8) begin
-
-                                registro_desplazamiento_rx[bit_rx]
-                                    <= wdata[0];
-
-                                bit_rx <= bit_rx + 1'b1;
-
-                            end
-
-                            // ---------------------------------
-                            // BIT DE STOP
-                            // ---------------------------------
-
-                            else begin
-
-                                if (wdata[0] == 1'b1) begin
-
-                                    registro_rx <= {
-                                        24'b0,
-                                        registro_desplazamiento_rx
-                                    };
-
-                                    rx_recibido <= 1'b1;
-
-                                end
-
-                                rx_activo <= 1'b0;
-                                bit_rx <= 4'd0;
-
-                            end
-
-                        end
-
                     end
 
-                    // =========================================
+
+                    // -------------------------------------------------
                     // CONTROL
-                    // =========================================
+                    // -------------------------------------------------
 
                     2'b10: begin
 
-                        // bit 0 -> limpiar TX
-                        if (wdata[0])
-                            tx_pendiente <= 1'b0;
+                        // ---------------------------------------------
+                        // SEND
+                        // ---------------------------------------------
 
-                        // bit 1 -> limpiar RX
-                        if (wdata[1])
+                        if (wdata[0] &&
+                            !tx_activo &&
+                            !tx_pendiente) begin
+
+                            tx_pendiente <= 1'b1;
+
+                        end
+
+
+                        // ---------------------------------------------
+                        // CLEAR RX
+                        // ---------------------------------------------
+
+                        if (wdata[1]) begin
+
                             rx_recibido <= 1'b0;
+
+                        end
 
                     end
 
                     default: begin
+
                     end
 
                 endcase
 
             end
 
+
             // =================================================
-            // TRANSMISOR
+            // INICIAR TX
+            // =================================================
+
+            if (tx_pendiente && !tx_activo) begin
+
+                registro_tx_serial <= {
+                    1'b1,
+                    registro_tx,
+                    1'b0
+                };
+
+                bit_tx      <= 4'd0;
+                contador_tx <= 32'd0;
+
+                tx_activo <= 1'b1;
+                tx_pendiente <= 1'b0;
+
+            end
+
+
+            // =================================================
+            // TRANSMISION
             // =================================================
 
             if (tx_activo) begin
 
-                if (contador_baud_tx == CICLOS_BAUD - 1) begin
+                if (contador_tx == CICLOS_BAUD - 1) begin
 
-                    contador_baud_tx <= 16'd0;
+                    contador_tx <= 32'd0;
 
                     if (bit_tx == 4'd9) begin
 
-                        // Último bit
                         tx_activo <= 1'b0;
-                        tx_pendiente <= 1'b0;
-
-                        tx_bit <= 1'b1;
-
-                        bit_tx <= 4'd0;
+                        bit_tx    <= 4'd0;
 
                     end
 
@@ -270,25 +244,216 @@ module UART #(
 
                         bit_tx <= bit_tx + 1'b1;
 
-                        tx_bit <=
-                            registro_desplazamiento_tx[
-                                bit_tx + 1'b1
-                            ];
-
                     end
 
                 end
 
                 else begin
 
-                    contador_baud_tx <=
-                        contador_baud_tx + 1'b1;
+                    contador_tx <= contador_tx + 1'b1;
+
+                end
+
+            end
+
+
+            // =================================================
+            // DETECCION DEL START BIT
+            // =================================================
+            //
+            // UART en reposo = 1
+            // START            = 0
+            //
+            // Al detectar 0:
+            //
+            // esperamos medio periodo.
+            //
+            // =================================================
+
+            if (!rx_activo &&
+                (rx_sync2 == 1'b0)) begin
+
+                rx_activo   <= 1'b1;
+                bit_rx      <= 4'd0;
+
+                contador_rx <= 32'd0;
+
+            end
+
+
+            // =================================================
+            // RECEPCION
+            // =================================================
+
+            if (rx_activo) begin
+
+                // -------------------------------------------------
+                // Primer medio bit:
+                // validar START
+                // -------------------------------------------------
+
+                if (bit_rx == 4'd0) begin
+
+                    if (contador_rx == MEDIO_BAUD - 1) begin
+
+                        contador_rx <= 32'd0;
+
+                        if (rx_sync2 == 1'b0) begin
+
+                            bit_rx <= 4'd1;
+
+                        end
+
+                        else begin
+
+                            // START falso
+
+                            rx_activo <= 1'b0;
+                            bit_rx    <= 4'd0;
+
+                        end
+
+                    end
+
+                    else begin
+
+                        contador_rx <= contador_rx + 1'b1;
+
+                    end
+
+                end
+
+                // -------------------------------------------------
+                // BITS DE DATOS
+                // -------------------------------------------------
+
+                else if (bit_rx <= 4'd8) begin
+
+                    if (contador_rx == CICLOS_BAUD - 1) begin
+
+                        contador_rx <= 32'd0;
+
+                        registro_rx_serial[bit_rx - 1'b1]
+                            <= rx_sync2;
+
+                        bit_rx <= bit_rx + 1'b1;
+
+                    end
+
+                    else begin
+
+                        contador_rx <= contador_rx + 1'b1;
+
+                    end
+
+                end
+
+                // -------------------------------------------------
+                // STOP BIT
+                // -------------------------------------------------
+
+                else begin
+
+                    if (contador_rx == CICLOS_BAUD - 1) begin
+
+                        contador_rx <= 32'd0;
+
+                        rx_activo <= 1'b0;
+                        bit_rx    <= 4'd0;
+
+                        if (rx_sync2) begin
+
+                            registro_rx <= registro_rx_serial;
+                            rx_recibido <= 1'b1;
+
+                        end
+
+                    end
+
+                    else begin
+
+                        contador_rx <= contador_rx + 1'b1;
+
+                    end
 
                 end
 
             end
 
         end
+
+    end
+
+
+    // =========================================================
+    // SALIDAS DEL BUS
+    // =========================================================
+
+    always_comb begin
+
+        rdata = 32'd0;
+
+        case (addr)
+
+            // =================================================
+            // TX DATA
+            // =================================================
+
+            2'b00: begin
+
+                rdata[7:0] = registro_tx;
+
+            end
+
+
+            // =================================================
+            // RX DATA
+            // =================================================
+
+            2'b01: begin
+
+                rdata[7:0] = registro_rx;
+
+            end
+
+
+            // =================================================
+            // ESTADO
+            // =================================================
+
+            2'b10: begin
+
+                rdata[0] = tx_activo || tx_pendiente;
+                rdata[1] = rx_recibido;
+                rdata[2] = tx_fisico;
+
+            end
+
+
+            default: begin
+
+                rdata = 32'd0;
+
+            end
+
+        endcase
+
+    end
+
+
+    // =========================================================
+    // TX FISICO
+    // =========================================================
+
+    always_comb begin
+
+        if (tx_activo)
+
+            tx_fisico = registro_tx_serial[bit_tx];
+
+        else
+
+            tx_fisico = 1'b1;
 
     end
 

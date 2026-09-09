@@ -1,16 +1,24 @@
 module TOP_AHORCADO (
 
-    input logic        clk,
-    input logic        rst,
+    // ============================================================
+    // RELOJ Y RESET
+    // ============================================================
 
-    input logic [1:0]  botones,
+    input logic clk,
+    input logic rst,
+
+    // ============================================================
+    // BOTONES
+    // ============================================================
+
+    input logic [1:0] botones,
 
     // ============================================================
     // UART FISICO
     // ============================================================
 
-    input logic        RsRx,
-    output logic       RsTx,
+    input logic RsRx,
+    output logic RsTx,
 
     // ============================================================
     // SALIDAS
@@ -19,7 +27,7 @@ module TOP_AHORCADO (
     output logic [6:0] segmentos,
     output logic [7:0] anodos,
 
-    output logic       buzzer,
+    output logic buzzer,
 
     output logic [2:0] leds,
 
@@ -27,8 +35,8 @@ module TOP_AHORCADO (
     // LCD FISICO
     // ============================================================
 
-    output logic       lcd_rs,
-    output logic       lcd_en,
+    output logic lcd_rs,
+    output logic lcd_en,
     output logic [3:0] lcd_datos
 
 );
@@ -39,50 +47,22 @@ module TOP_AHORCADO (
 
     logic [1:0] botones_estables;
 
-    Debouncer debouncer_inst (
-        .clk            (clk),
-        .rst            (rst),
-        .botones        (botones),
-        .estado_botones (botones_estables)
-    );
-
-
     // ============================================================
-    // SELECTOR DE DIFICULTAD
+    // DIFICULTAD
     // ============================================================
 
     logic dificultad;
     logic partida_iniciada;
 
-    Selector_dificultad selector_dificultad_inst (
-        .clk              (clk),
-        .rst              (rst),
-        .seleccionar      (botones_estables[0]),
-        .aceptar          (botones_estables[1]),
-        .dificultad       (dificultad),
-        .partida_iniciada (partida_iniciada)
-    );
-
-
     // ============================================================
-    // SELECTOR DE PALABRA
+    // PALABRA
     // ============================================================
 
     logic [63:0] palabra_actual;
-    logic [3:0]  cantidad_letras;
-
-    Selector_palabra selector_palabra_inst (
-        .clk             (clk),
-        .rst             (rst),
-        .partida_iniciada(partida_iniciada),
-        .dificultad      (dificultad),
-        .palabra_actual  (palabra_actual),
-        .cantidad_letras (cantidad_letras)
-    );
-
+    logic [3:0] cantidad_letras;
 
     // ============================================================
-    // SEÑALES DEL JUEGO
+    // ESTADO DEL JUEGO
     // ============================================================
 
     logic [1:0] estado_actual;
@@ -94,14 +74,66 @@ module TOP_AHORCADO (
 
     logic letra_correcta;
     logic letra_incorrecta;
+    logic letra_repetida;
+
+    logic palabra_completa;
 
     logic mostrar_guiones;
 
     logic [63:0] palabra_estado;
-    logic [63:0] palabra_lcd;
 
     logic [4:0] fallos;
 
+    // ============================================================
+    // FSM
+    // ============================================================
+
+    logic inicializar_partida;
+    logic procesar_letra;
+    logic consumir_letra;
+
+    // ============================================================
+    // EVENTOS UART
+    // ============================================================
+
+    logic enviar_inicio;
+    logic enviar_resultado;
+    logic enviar_final;
+
+    // ============================================================
+    // RX UART
+    // ============================================================
+
+    logic letra_disponible;
+    logic [7:0] letra_uart;
+
+    // ============================================================
+    // BUS UART
+    // ============================================================
+
+    logic uart_write_enable;
+    logic [1:0] uart_addr;
+    logic [31:0] uart_wdata;
+    logic [31:0] uart_rdata;
+
+    // ============================================================
+    // BUS LCD
+    // ============================================================
+
+    logic lcd_write_enable;
+    logic [1:0] lcd_addr;
+    logic [31:0] lcd_wdata;
+    logic [31:0] lcd_rdata;
+
+    // ============================================================
+    // MEMORIA
+    // ============================================================
+
+    logic [8:0] direccion_lcd_memoria;
+    logic [7:0] dato_lcd_memoria;
+
+    logic [8:0] direccion_uart_memoria;
+    logic [7:0] dato_uart_memoria;
 
     // ============================================================
     // TEMPORIZADOR
@@ -113,216 +145,353 @@ module TOP_AHORCADO (
 
     logic tiempo_agotado;
 
-    Temporizador temporizador_inst (
+    // ============================================================
+    // DEBOUNCER
+    // ============================================================
+
+    Debouncer debouncer_inst (
+
         .clk            (clk),
         .rst            (rst),
-        .partida_activa (partida_activa),
-        .dificultad     (dificultad),
-        .victoria       (victoria),
-        .derrota        (derrota),
-        .unidades       (unidades),
-        .decenas        (decenas),
-        .centenas       (centenas),
-        .timeout        (tiempo_agotado)
+
+        .botones        (botones),
+        .estado_botones (botones_estables)
+
     );
 
+    // ============================================================
+    // SELECTOR DE DIFICULTAD
+    // ============================================================
+
+    Selector_dificultad selector_dificultad_inst (
+
+        .clk              (clk),
+        .rst              (rst),
+
+        .seleccionar      (botones_estables[0]),
+        .aceptar          (botones_estables[1]),
+
+        .dificultad       (dificultad),
+        .partida_iniciada (partida_iniciada)
+
+    );
+
+    // ============================================================
+    // SELECTOR DE PALABRA
+    // ============================================================
+
+    Selector_palabra selector_palabra_inst (
+
+        .clk             (clk),
+        .rst             (rst),
+
+        .partida_iniciada(partida_iniciada),
+        .dificultad      (dificultad),
+
+        .palabra_actual  (palabra_actual),
+        .cantidad_letras (cantidad_letras)
+
+    );
+
+    // ============================================================
+    // PARTIDA ACTIVA
+    // ============================================================
+
+    assign partida_activa =
+        (estado_actual == 2'b01);
+
+    // ============================================================
+    // TEMPORIZADOR
+    // ============================================================
+
+    Temporizador temporizador_inst (
+
+        .clk            (clk),
+        .rst            (rst),
+
+        .partida_activa (partida_activa),
+        .dificultad     (dificultad),
+
+        .victoria       (victoria),
+        .derrota        (derrota),
+
+        .unidades       (unidades),
+        .decenas        (decenas),
+        .centenas        (centenas),
+
+        .timeout        (tiempo_agotado)
+
+    );
 
     // ============================================================
     // SIETE SEGMENTOS
     // ============================================================
 
     siete_segmentos siete_segmentos_inst (
+
         .clk            (clk),
         .rst            (rst),
+
         .unidades       (unidades),
-        .decenas         (decenas),
-        .centenas        (centenas),
+        .decenas        (decenas),
+        .centenas       (centenas),
+
         .mostrar_guiones(mostrar_guiones),
+
         .segmentos      (segmentos),
         .anodos         (anodos)
-    );
 
+    );
 
     // ============================================================
     // FSM PRINCIPAL
     // ============================================================
 
     FSM fsm_inst (
-        .clk              (clk),
-        .rst              (rst),
 
-        .partida_iniciada (partida_iniciada),
+        .clk                 (clk),
+        .rst                 (rst),
 
-        .palabra_estado   (palabra_estado),
-        .cantidad_letras  (cantidad_letras),
+        .partida_iniciada    (partida_iniciada),
 
-        .fallos           (fallos),
+        .letra_disponible    (letra_disponible),
 
-        .tiempo_agotado   (tiempo_agotado),
+        .palabra_completa    (palabra_completa),
 
-        .estado_actual    (estado_actual),
+        .fallos              (fallos),
 
-        .victoria         (victoria),
-        .derrota          (derrota),
+        .tiempo_agotado      (tiempo_agotado),
 
-        .mostrar_guiones  (mostrar_guiones),
+        .inicializar_partida (inicializar_partida),
+        .procesar_letra      (procesar_letra),
 
-        .palabra_lcd      (palabra_lcd)
+        .consumir_letra      (consumir_letra),
+
+        .enviar_inicio       (enviar_inicio),
+        .enviar_resultado    (enviar_resultado),
+        .enviar_final        (enviar_final),
+
+        .estado_actual       (estado_actual),
+
+        .victoria            (victoria),
+        .derrota             (derrota),
+
+        .mostrar_guiones     (mostrar_guiones),
+
+        .palabra_lcd         ()
+
     );
 
-
     // ============================================================
-    // PARTIDA ACTIVA
-    // ============================================================
-
-    assign partida_activa = (estado_actual == 2'b01);
-
-
-    // ============================================================
-    // BUS UART
+    // CONTROLADOR UART
     // ============================================================
 
-    logic        uart_write_enable;
-    logic [1:0]  uart_addr;
-    logic [31:0] uart_wdata;
-    logic [31:0] uart_rdata;
+    Controlador_UART controlador_uart_inst (
 
+        .clk               (clk),
+        .rst               (rst),
+
+        .partida_activa    (partida_activa),
+
+        .enviar_inicio     (enviar_inicio),
+        .enviar_resultado  (enviar_resultado),
+        .enviar_final      (enviar_final),
+
+        .dificultad        (dificultad),
+
+        .cantidad_letras   (cantidad_letras),
+
+        .letra_recibida    (letra_uart),
+
+        .letra_correcta    (letra_correcta),
+        .letra_incorrecta  (letra_incorrecta),
+        .letra_repetida    (letra_repetida),
+
+        .palabra_estado    (palabra_estado),
+        .palabra_actual    (palabra_actual),
+
+        .fallos            (fallos),
+
+        .victoria          (victoria),
+        .derrota           (derrota),
+
+        .letra_disponible  (letra_disponible),
+        .letra_uart        (letra_uart),
+
+        .consumir_letra    (consumir_letra),
+
+        .direccion_memoria (direccion_uart_memoria),
+        .dato_memoria      (dato_uart_memoria),
+
+        .write_enable      (uart_write_enable),
+        .addr              (uart_addr),
+        .wdata             (uart_wdata),
+
+        .rdata             (uart_rdata)
+
+    );
 
     // ============================================================
     // UART
     // ============================================================
 
-    UART uart_inst (
+    UART #(
+
+        .FRECUENCIA_RELOJ(100_000_000),
+        .BAUDRATE        (115_200)
+
+    ) uart_inst (
+
         .clk          (clk),
         .rst          (rst),
 
         .write_enable (uart_write_enable),
         .addr         (uart_addr),
         .wdata        (uart_wdata),
+        .rdata        (uart_rdata),
 
-        .rdata        (uart_rdata)
+        .rx_fisico    (RsRx),
+        .tx_fisico    (RsTx)
+
     );
-
 
     // ============================================================
     // VALIDADOR DE LETRA
     // ============================================================
 
     Validador_Letra validador_letra_inst (
-        .clk              (clk),
-        .rst              (rst),
 
-        .partida_iniciada (partida_iniciada),
-        .partida_activa   (partida_activa),
+        .clk                 (clk),
+        .rst                 (rst),
 
-        .palabra_actual   (palabra_actual),
-        .cantidad_letras  (cantidad_letras),
+        .inicializar_partida (inicializar_partida),
+        .procesar_letra      (procesar_letra),
 
-        .dificultad       (dificultad),
+        .palabra_actual      (palabra_actual),
+        .cantidad_letras     (cantidad_letras),
 
-        .tiempo_agotado   (tiempo_agotado),
+        .letra_recibida      (letra_uart),
 
-        .rdata            (uart_rdata),
+        .palabra_estado      (palabra_estado),
 
-        .rx_fisico        (RsRx),
-        .tx_fisico        (RsTx),
+        .fallos              (fallos),
 
-        .write_enable     (uart_write_enable),
-        .addr             (uart_addr),
-        .wdata            (uart_wdata),
+        .letra_correcta      (letra_correcta),
+        .letra_incorrecta    (letra_incorrecta),
+        .letra_repetida      (letra_repetida),
 
-        .palabra_estado   (palabra_estado),
+        .palabra_completa    (palabra_completa)
 
-        .fallos           (fallos),
-
-        .letra_correcta   (letra_correcta),
-        .letra_incorrecta(letra_incorrecta)
     );
 
-
     // ============================================================
-    // LED DE ESTADO
+    // LED
     // ============================================================
 
     LED_estado led_estado_inst (
-        .clk          (clk),
-        .rst          (rst),
-        .estado_actual(estado_actual),
-        .leds         (leds)
-    );
 
+        .clk           (clk),
+        .rst           (rst),
+
+        .estado_actual (estado_actual),
+
+        .leds          (leds)
+
+    );
 
     // ============================================================
     // BUZZER
     // ============================================================
 
     Buzzer buzzer_inst (
+
         .clk              (clk),
         .rst              (rst),
+
         .letra_correcta   (letra_correcta),
-        .letra_incorrecta(letra_incorrecta),
+        .letra_incorrecta (letra_incorrecta),
+
         .victoria         (victoria),
         .derrota          (derrota),
+
         .buzzer           (buzzer)
+
     );
-
-
-    // ============================================================
-    // BUS DEL PERIFERICO LCD
-    // ============================================================
-
-    logic        lcd_write_enable;
-    logic [1:0]  lcd_addr;
-    logic [31:0] lcd_wdata;
-    logic [31:0] lcd_rdata;
-
 
     // ============================================================
     // CONTROLADOR LCD
     // ============================================================
-    
+
     Controlador_LCD controlador_lcd (
+
         .clk             (clk),
         .rst             (rst),
 
         .estado_actual   (estado_actual),
         .dificultad      (dificultad),
 
-        .derrota         (derrota),
         .victoria        (victoria),
+        .derrota         (derrota),
+
         .fallos          (fallos),
 
         .palabra_estado  (palabra_estado),
         .palabra_actual  (palabra_actual),
+
         .cantidad_letras (cantidad_letras),
+
+        .direccion_memoria(direccion_lcd_memoria),
+        .dato_memoria    (dato_lcd_memoria),
 
         .wenable         (lcd_write_enable),
         .addr            (lcd_addr),
         .wdata           (lcd_wdata),
 
         .rdata           (lcd_rdata)
-    );
 
+    );
 
     // ============================================================
     // PERIFERICO LCD
     // ============================================================
 
     LCD #(
+
         .FRECUENCIA_RELOJ(100_000_000)
+
     ) periferico_lcd (
 
         .clk       (clk),
         .rst       (rst),
 
         .wenable   (lcd_write_enable),
-        .addr       (lcd_addr),
-        .wdata      (lcd_wdata),
-        .rdata      (lcd_rdata),
+        .addr      (lcd_addr),
+        .wdata     (lcd_wdata),
+        .rdata     (lcd_rdata),
 
         .lcd_rs    (lcd_rs),
         .lcd_en    (lcd_en),
         .lcd_datos (lcd_datos)
+
+    );
+
+    // ============================================================
+    // MEMORIA COMPARTIDA
+    // ============================================================
+
+    Memoria memoria_inst (
+
+        .dificultad       (dificultad),
+        .indice_palabra   (5'd0),
+
+        .palabra_actual   (),
+
+        .direccion_lcd    (direccion_lcd_memoria),
+        .dato_lcd         (dato_lcd_memoria),
+
+        .direccion_uart   (direccion_uart_memoria),
+        .dato_uart        (dato_uart_memoria)
+
     );
 
 endmodule

@@ -2,247 +2,182 @@ import serial
 import time
 import msvcrt
 
+
 PUERTO = "COM4"
 BAUDRATE = 115200
 
 
-# ============================================================
-# CONEXION FPGA
-# ============================================================
+fpga = serial.Serial(
+    PUERTO,
+    BAUDRATE,
+    timeout=0.05
+)
 
-def conectar_fpga():
+time.sleep(0.2)
 
-    try:
-
-        fpga = serial.Serial(
-            PUERTO,
-            BAUDRATE,
-            timeout=0.05
-        )
-
-        time.sleep(0.2)
-
-        fpga.reset_input_buffer()
-        fpga.reset_output_buffer()
-
-        print(f"FPGA conectada en {PUERTO}")
-        print(f"{BAUDRATE} 8N1")
-
-        return fpga
-
-    except serial.SerialException as e:
-
-        print("\nERROR: No se pudo conectar con la FPGA.")
-        print(e)
-
-        return None
+fpga.reset_input_buffer()
+fpga.reset_output_buffer()
 
 
-# ============================================================
-# RECIBIR MENSAJE DE LA FPGA
-# ============================================================
+buffer_uart = bytearray()
 
-def recibir_mensaje(fpga):
 
-    datos = bytearray()
+def recibir():
 
-    while fpga.in_waiting:
+    global buffer_uart
 
-        datos.extend(
+    if fpga.in_waiting:
+
+        buffer_uart.extend(
             fpga.read(fpga.in_waiting)
         )
 
-    if len(datos) == 0:
-        return ""
+    if b"\n" not in buffer_uart:
 
-    try:
+        return None
 
-        return datos.decode(
-            "ascii",
-            errors="ignore"
-        ).strip()
+    posicion = buffer_uart.index(b"\n")
 
-    except Exception:
+    datos = buffer_uart[:posicion]
 
-        return ""
+    del buffer_uart[:posicion + 1]
 
-
-# ============================================================
-# ENVIAR LETRA
-# ============================================================
-
-def enviar_letra(fpga, letra):
-
-    letra = letra.upper().strip()
-
-    if len(letra) != 1 or not letra.isalpha():
-
-        return False
-
-    try:
-
-        fpga.write(
-            letra.encode("ascii")
-        )
-
-        return True
-
-    except serial.SerialException as e:
-
-        print("\nERROR enviando la letra:")
-        print(e)
-
-        return False
+    return datos.decode(
+        "ascii",
+        errors="ignore"
+    ).rstrip("\r")
 
 
-# ============================================================
-# ESPERAR NUEVA PARTIDA
-# ============================================================
+def imprimir_espera():
 
-def esperar_nueva_partida(fpga):
-
-    print("\n====================================================")
+    print()
+    print("====================================================")
     print("       ESPERANDO NUEVA PARTIDA")
     print("====================================================")
-
     print("Seleccione la dificultad/modo en la FPGA.")
 
-    while True:
 
-        mensaje = recibir_mensaje(fpga)
+def imprimir_nueva_partida():
 
-        if mensaje:
-
-            print(f"FPGA: {mensaje}")
-
-            if mensaje.startswith("START,"):
-
-                return mensaje
-
-        time.sleep(0.01)
-
-
-# ============================================================
-# JUGAR PARTIDA
-# ============================================================
-
-def jugar_partida(fpga, mensaje_start):
-
-    print("\n====================================================")
+    print()
+    print("====================================================")
     print("              NUEVA PARTIDA")
     print("====================================================")
 
-    print(f"FPGA: {mensaje_start}")
 
-    print("\nIngrese una letra: ", end="", flush=True)
+def imprimir_fin_partida(resultado):
+
+    print()
+    print("====================================================")
+    print("              FIN DE LA PARTIDA")
+    print("====================================================")
+    print("Resultado:", resultado)
+    print()
+    print("La FPGA regresará al selector de modo.")
+    print()
+    print("Esperando la siguiente partida...")
 
 
-    # --------------------------------------------------------
-    # Buffer de teclado
-    # --------------------------------------------------------
+try:
+
+    imprimir_espera()
 
     entrada = ""
-
+    partida_activa = False
+    fin_partida = False
 
     while True:
 
-        # ====================================================
-        # 1. REVISAR SI LA FPGA ENVIO ALGO
-        # ====================================================
+        mensaje = recibir()
 
-        mensaje = recibir_mensaje(fpga)
+        if mensaje is not None:
 
-        if mensaje:
+            # RESET vuelve al selector
+            if mensaje == "RESET":
 
-            print(f"\nFPGA: {mensaje}")
+                entrada = ""
+                partida_activa = False
+                fin_partida = False
+
+                imprimir_espera()
+
+            # START inicia una nueva partida
+            elif mensaje.startswith("START,"):
+
+                if not partida_activa:
+
+                    imprimir_nueva_partida()
+                    partida_activa = True
+                    fin_partida = False
+
+                print("FPGA:", mensaje)
+
+                print()
+                print(
+                    "Ingrese una letra:",
+                    end=" ",
+                    flush=True
+                )
+
+            # FINAL termina la partida
+            elif mensaje.startswith("FINAL,"):
+
+                print("FPGA:", mensaje)
+
+                imprimir_fin_partida(mensaje)
+
+                partida_activa = False
+                fin_partida = True
+
+                imprimir_espera()
+
+            # Demas mensajes de la FPGA
+            else:
+
+                print()
+                print("FPGA:", mensaje)
+
+                if mensaje.startswith("RESULT,REP,"):
+
+                    print("Letra repetida.")
+
+                if partida_activa and not fin_partida:
+
+                    print()
+                    print(
+                        "Ingrese una letra:",
+                        end=" ",
+                        flush=True
+                    )
 
 
-            # ------------------------------------------------
-            # FINAL
-            # ------------------------------------------------
-
-            if mensaje.startswith("FINAL,"):
-
-                print("\n====================================================")
-                print("              FIN DE LA PARTIDA")
-                print("====================================================")
-
-                print(f"Resultado: {mensaje}")
-
-                print("\nLa FPGA regresará al selector de modo.")
-
-                return True
-
-
-        # ====================================================
-        # 2. REVISAR TECLADO SIN BLOQUEAR
-        # ====================================================
+        # ------------------------------------------------
+        # TECLADO
+        # ------------------------------------------------
 
         while msvcrt.kbhit():
 
             caracter = msvcrt.getwch()
 
-
-            # ------------------------------------------------
-            # ENTER
-            # ------------------------------------------------
-
             if caracter in ("\r", "\n"):
 
-                letra = entrada.strip().upper()
+                if len(entrada) == 1 and partida_activa:
 
-                entrada = ""
-
-
-                if len(letra) == 1 and letra.isalpha():
+                    fpga.write(
+                        entrada.upper().encode("ascii")
+                    )
 
                     print()
 
-                    if not enviar_letra(
-                        fpga,
-                        letra
-                    ):
+                    entrada = ""
 
-                        print(
-                            "\nERROR: No se pudo enviar "
-                            "la letra."
-                        )
+                elif not partida_activa:
 
-                        return False
-
-                    # ------------------------------------------------
-                    # NO esperamos aquí con input().
-                    #
-                    # Volvemos inmediatamente al while para
-                    # poder detectar también un FINAL por timeout.
-                    # ------------------------------------------------
-
-                    print(
-                        "\nIngrese una letra: ",
-                        end="",
-                        flush=True
-                    )
-
-                else:
-
-                    print(
-                        "\nIngrese solamente una letra."
-                    )
-
-                    print(
-                        "Ingrese una letra: ",
-                        end="",
-                        flush=True
-                    )
-
-
-            # ------------------------------------------------
-            # BACKSPACE
-            # ------------------------------------------------
+                    entrada = ""
 
             elif caracter == "\b":
 
-                if len(entrada) > 0:
+                if entrada:
 
                     entrada = entrada[:-1]
 
@@ -252,108 +187,27 @@ def jugar_partida(fpga, mensaje_start):
                         flush=True
                     )
 
-
-            # ------------------------------------------------
-            # CARACTER NORMAL
-            # ------------------------------------------------
-
             elif caracter.isalpha():
 
-                entrada += caracter
+                if len(entrada) == 0 and partida_activa:
 
-                print(
-                    caracter,
-                    end="",
-                    flush=True
-                )
+                    entrada += caracter
 
+                    print(
+                        caracter,
+                        end="",
+                        flush=True
+                    )
 
-        # ====================================================
-        # PEQUEÑA ESPERA
-        # ====================================================
 
         time.sleep(0.01)
 
 
-# ============================================================
-# MAIN
-# ============================================================
+except KeyboardInterrupt:
 
-def main():
-
-    print("\n")
-
-    print("====================================")
-    print("             AHORCADO")
-    print("====================================")
+    pass
 
 
-    fpga = conectar_fpga()
+finally:
 
-
-    if fpga is None:
-
-        return
-
-
-    try:
-
-        while True:
-
-            # ------------------------------------------------
-            # Esperar START
-            # ------------------------------------------------
-
-            mensaje_start = esperar_nueva_partida(
-                fpga
-            )
-
-
-            # ------------------------------------------------
-            # Jugar
-            # ------------------------------------------------
-
-            partida_ok = jugar_partida(
-                fpga,
-                mensaje_start
-            )
-
-
-            if not partida_ok:
-
-                print(
-                    "\nSe perdió la comunicación "
-                    "con la FPGA."
-                )
-
-                break
-
-
-            print(
-                "\nEsperando la siguiente partida..."
-            )
-
-
-    except KeyboardInterrupt:
-
-        print(
-            "\n\nPrograma detenido por el usuario."
-        )
-
-
-    finally:
-
-        if fpga is not None and fpga.is_open:
-
-            fpga.close()
-
-        print("Puerto FPGA cerrado.")
-
-
-# ============================================================
-# EJECUCION
-# ============================================================
-
-if __name__ == "__main__":
-
-    main()
+    fpga.close()
