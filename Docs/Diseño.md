@@ -27,17 +27,22 @@ LA FSM se encarga se enviar o recibir las señales de control según sea el esta
 
 
 ### Validador de letra
+#### a) Diagrama / Diseño
+![Diagrama modular de cuarto nivel del Validador Letra](../images/Diagrama_Modular_Nivel_4_ValidadorLetra.png)
+
+#### b) Objetivo del módulo
+Este módulo busca procesar y validar cada una de las letras ingresadas por el jugador a través de la PC, evalúa si la letra recibida es una letra válida (Letras mayúsculas únicamente) y comprueba mediante un registro de letras usadas si ya ha sido ingresada previamente, esto con el fin de evitar contar fallos por letras duplicadas. Luego, compara la letra ingresada con cada una de las posiciones de la palabra almacenada temporalmente en un registro. Si la letra es correcta, actualiza el estado visible de la palabra revelando las posiciones correspondientes; de lo contrario, incrementa el contador de fallos.
+
+
+### Debouncer, Selector de Dificultad y Selector de palabra
+#### a) Diagrama / Diseño
+![Diagrama modular de cuarto nivel de Selectores](../images/Diagrama_Modular_Nivel_4_Debouncer_SelectorDificultad_SelectorPalabra.png)
+
+#### b) Objetivo del módulo
 
 
 
-
-
-### Selector de palabra
-
-
-
-
-### Periférido LCD
+### Periférico LCD
 
 #### a) Diagrama / Diseño 
 
@@ -51,12 +56,17 @@ Siguiendo el razonamiento de los bloques de registro REG 0 y REG 1, es important
 Para la salida final del bloque del LCD, existe un sub-bloque LCD screen,que se encarga de selecionar el espacio de la letra "adivinada" de la mano de la FSM que le comunica, la selección del registro(espacio en el que va a escribir), escribir en el registro y una señal de habilitar el LCD para visualizar la letra escogida
 
 
+### Indicador de posición mediante LEDs
+
+#### a) Diagrama modular / Diseño
+![Diagrama modular de cuarto nivel del UART](../images/Diagrama_Modular_Nivel_4_UART.png)
+
+#### b) Objetivo del módulo
+
+
 ### Máquina de estado
 
 
 
 
 
-### Indicador de posición mediante LEDs
-
-#### a) Diagrama modular / Diseño 
