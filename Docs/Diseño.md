@@ -7,16 +7,21 @@ En este primer nivel se muestra la funcionalidad básica del circuito, el juego 
 ---
 
 ## Segundo Nivel: Arquitectura de Subsistemas
-
+Para el segundo nivel se maneja la entrada introducida por el jugador desde el PC por medio un UART que realiza la comunicación entre la PC y la FPGA. Esta última es la que se encargará de manejar toda la lógica del juego, desde elegir aleatoriamente una palabra para adivinar, hasta manejar las letras introducidas, repetidas y fallidas, además de comunicar al LCD los datos que tiene que mostrar, y encender los Displays 7 segmentos del timer y el buzzer según el estado del juego.
 
 
 ![Diagrama de Bloques de Segundo Nivel](../images/Diagrama_Modular_Nivel_2.png)
+---
 
 ## Tercer Nivel: 
-
-
+Para el tercer nivel, se cuenta con un módulo antirebotes que recibe las entradas de las pulsaciones de los botones, los cuales son los encargados de seleccionar la dificultad, confirmar la selección y enviar una señal de reset general a la FSM. El módulo "Difficulty Selector" recibe la señal "Select" con la cual cambia el modo de juego de fácil a difícil o viceversa. Esta luego envía la señal "Dificultad" al LCD para que muestre cua está seleccionada.
+La Memoria cuenta con bancos de memoria para las palabras según la difcultad e impresiones fijas que se realizan en la partida en el LCD. El módulo "Word Selector" junto al generador de números aleatorios se encargan de seleccionar una palabra al azar correspondiente a la memoria de cada dificultad, la cual se envía como la señal "Palabra_Select" hacia el módulo "Letter-Validation".
+El módulo "Letter-Validation" tiene varias funciones, se encarga de recibir la letra ingresada en la PC por medio del UART, luego verifica si es una letra válida, donde n caso de que no lo sea no es ignorada, después checa si la letra ya ha sido utiliza, y por último la compara con cada letra de la palabra a adivinar, en caso de que la comparación devuelva 0 bits, aumenta el contador de fallos. Este contador puede incrementarse hasta 6, cuando esto ocurre levanta una bandera para que FSM finalice el juego. En caso de que todas las letras de la palabra fueran adivinadas, se levanta una bandera "Victoria" para que la FSM termine el juego y el mensaje de victoria en el LCD, esto último también ocurre si se pierde la partida.
+El módulo Timer, cuenta con un contador el cual, según la dificultad seleccionada, tiene un tiempo determinado de ronda, 120 segundos para el modo fácil y 90 segundos para el modo difícil, en caso de que se acabe el tiempo envía una señal de "timeout" hacia la FSM.
+LA FSM se encarga se enviar o recibir las señales de control según sea el estado de la partida. Además tanto el periférico UART como el LCD cuenta con un módulo de control aparte de la FSM.
 
 ![Diagrama de Bloques de Tercer Nivel](../images/Diagrama_Modular_Nivel_3.png)
+---
 
 ## Cuarto Nivel
 
