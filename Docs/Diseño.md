@@ -4,20 +4,20 @@
 
 
 
-![Diagrama de Bloques de Primer Nivel](../images/nivel1.png)
+![Diagrama de Bloques de Primer Nivel](../images/Diagrama_Modular_Nivel_1.png)
 ---
 
 ## Segundo Nivel: Arquitectura de Subsistemas
 
 
 
-![Diagrama de Bloques de Segundo Nivel](../images/nivel2.png)
+![Diagrama de Bloques de Segundo Nivel](../images/Diagrama_Modular_Nivel_2.png)
 
 ## Tercer Nivel: 
 
 
 
-![Diagrama de Bloques de Tercer Nivel](../images/nivel3.png)
+![Diagrama de Bloques de Tercer Nivel](../images/Diagrama_Modular_Nivel_3.png)
 
 ## Cuarto Nivel
 
