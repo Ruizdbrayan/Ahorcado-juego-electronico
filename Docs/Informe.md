@@ -214,7 +214,10 @@ Los puertos de entrada y salida de TOP_AHORCADO corresponden directamente a las 
 
 ### Conclusión
 
-
+los aspectos técnicos abordados, la integración exitosa de periféricos en una FPGA depende en gran medida de la correcta sincronización entre los dominios de tiempo internos del sistema y los protocolos de comunicación externos. Ya sea gestionando las estrictas temporizaciones de escritura y secuencias de inicialización que exige el controlador HD44780 en la pantalla PmodCLP, o realizando un muestreo preciso en el punto medio de cada bit recibido mediante la interfaz serial UART, el diseño digital debe priorizar la estabilidad temporal para asegurar una transferencia de datos robusta y libre de errores.  
+Asímismo, la estructuración de la arquitectura interna del sistema se beneficia sustancialmente del seguimiento de buenas prácticas en la organización del mapa de registros y la memoria. La separación explícita de señales de control, estado y datos sobre buses de 32 bits, sumada al establecimiento de protocolos de saludo (handshake) mediante banderas de ocupado y finalización, permite que el procesador interactúe de manera eficiente con periféricos lentos como la pantalla LCD sin bloquear las operaciones principales.  
+Por otro lado, la gestión eficiente de la información constante en bloques de memoria ROM demuestra la importancia de equilibrar la complejidad del hardware con el consumo de recursos de la FPGA. Al emplear de técnicas de empaquetado para cadenas de caracteres de longitud variable, ya sea mediante delimitadores o tablas de punteros independientes— optimiza el uso de la lógica reconfigurable, mientras que la integración de registros LFSR proporciona una solución ligera y eficaz para generar índices pseudoaleatorios con distribución uniforme sin recargar el área del circuito.  
+En conjunto, la combinación de módulos de visualización interactiva, recepción serial asíncrona, almacenamiento constante optimizado y generación de aleatoriedad conforma una plataforma integral y modular. Este enfoque estructurado no solo facilita el desarrollo de aplicaciones complejas como el juego del ahorcado, sino que establece una metodología reutilizable y escalable para el diseño de periféricos a medida en plataformas digitales modernas
 
 ---
 
