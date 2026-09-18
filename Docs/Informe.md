@@ -169,21 +169,41 @@ Este es un módulo pequeño que tiene como función principal comunicar al jugad
 
 ### Módulo Buzzer
 
+El módulo Buzzer recibe el bus principal de victoria o derrota que sale directamente de la FSM principal, con un tamaño de 2 bits, convirtiéndose en un código de eventos por ejemplo 00=silencio, 01=acierto, 10=error, 11=fin de partida. Para el proyecto se tiene la siguiente tabla de cómo se manejaron los tipos de sonido.
+
+| Condición | Tipo y duración |
+| --- | --- |
+| IDLE | Silencio, no tiene duración |
+| SONIDO_CORRECTO | pitido agudo al acertar una letra (dura 100 ms) |
+| SONIDO_INCORRECTO | pitido grave al fallar (dura 150 ms) |
+| SONIDO_VICTORIA1 y 2 | dos tonos seguidos cuando ganas, uno después del otro (250 ms cada uno) |
+| SONIDO_DERROTA1 y 2 | otros dos tonos seguidos cuando pierde, uno después del otro (250 ms cada uno) |
 
 
 
 ### Módulo FSM
 
+implementa el controlador central de la lógica de juego del sistema Ahorcado. Es responsable de coordinar la secuencia de eventos del juego (selección de dificultad, inicio de partida, procesamiento de letras, verificación de condiciones de fin de partida) y de generar las señales de control que activan al resto de los módulos del sistema (Validador_Letra, Controlador_UART, Temporizador, Buzzer, LED_estado, Controlador_LCD).
+Se debe aclarar que el sistema maneja dos procesadores separados, el primero, un bloque always_ff síncrono, que actualiza el registro de estado (estado <= siguiente_estado) y los registros auxiliares (resultado_victoria, contador_final). El segundo bloque always_comb, que calcula la señal combinacional siguiente_estado en función del estado actual y las entradas.
 
+Temporización del estado final
 
-### Módulo TOP
+Al ingresar a FINALIZADO, el contador contador_final (32 bits) se incrementa en cada ciclo de reloj hasta alcanzar DURACION_FINAL = 200,000,000 ciclos. Con una frecuencia de reloj de 100 MHz, este valor corresponde a un intervalo de 2 segundos, durante el cual se mantiene visible el resultado antes de retornar automáticamente a SELECTOR.
 
+La señal estado_actual codifica los seis estados internos en solo 2 bits, agrupando INICIALIZAR, ESPERAR_LETRA, PROCESAR_LETRA y COMPROBAR_RESULTADO bajo el valor 01 ("jugando"), de forma que los módulos consumidores (LED_estado, Controlador_LCD) no requieren conocer el detalle interno de la máquina de estados.
 
 
 ### Script ahorcado.py
 
+El módulo corresponde a la aplicación de interfaz de usuario en la computadora (host) que complementa el sistema digital implementado en la FPGA
+Su función general es recibir por el puerto serial los mensajes de estado que envía la FPGA y los traduce a una presentación legible en consola, además de capturar las letras que el usuario escribe en el teclado de la computadora y transmitirlas de vuelta hacia la FPGA
 
 
+### Módulo TOP
+
+El módulo TOP_AHORCADO constituye el nivel jerárquico superior de todo el diseño digital del sistema de juego Ahorcado. A diferencia de los módulos descritos anteriormente, que implementan una función específica del sistema (generación de palabras, validación de letras, temporización, comunicación serial, control de pantalla, etc.), este módulo no contiene prácticamente ninguna lógica de comportamiento propia. Su función es estrictamente estructural: instanciar cada uno de los subcircuitos que conforman el sistema y establecer, mediante la interconexión de sus puertos, las rutas por las cuales fluye la información entre ellos. Es, en el sentido más literal, la descripción del cableado completo del sistema, y por esa razón constituye el punto de partida obligado para comprender cómo se relacionan entre sí todos los módulos que fueron documentados de manera individual en las secciones anteriores.
+
+Los puertos de entrada y salida de TOP_AHORCADO corresponden directamente a las señales físicas disponibles en los pines de la FPGA: el reloj del sistema y la señal de reinicio, los dos botones físicos utilizados para seleccionar la dificultad y confirmar el inicio de la partida, las líneas de recepción y transmisión del puerto serial hacia la computadora, los segmentos y ánodos del display de siete segmentos empleado para mostrar el tiempo restante, el pin del zumbador encargado de los efectos sonoros, los tres LEDs indicadores del estado general del juego, y finalmente el conjunto de señales de control y datos que se conectan físicamente a la pantalla de cristal líquido (la señal de selección de registro, la señal de habilitación y los cuatro bits de datos en modo de cuatro bits). Ninguna de estas señales físicas se procesa directamente dentro de TOP_AHORCADO: todas se reenvían de inmediato hacia el subcircuito correspondiente, que es el que efectivamente interpreta o genera dicha señal.
 
 
 ## Análisis de resultados
