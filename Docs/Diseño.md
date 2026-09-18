@@ -1,8 +1,7 @@
 # Diseño de Juego Ahorcado (FPGA / periférico LCD)
 
 ## Primer Nivel: Descripción General del Sistema
-
-
+En este primer nivel se muestra la funcionalidad básica del circuito, el juego de Ahorcado recibe las señales de las pulsaciones de 3 botones, uno para intercambiar la dificultad del juego cada vez que se pulse, otro para confirmar la selección de dificultad y el último como señal de reset general. También recibe entradas proporcionadas por el jugador como letras. El sistema tiene como salidas generales las señales que controlan el LCD, el Buzzer y los Displays 7 segmentos.
 
 ![Diagrama de Bloques de Primer Nivel](../images/Diagrama_Modular_Nivel_1.png)
 ---
