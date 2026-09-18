@@ -136,7 +136,24 @@ El bloque combinacional always_comb habilita el ánodo correspondiente y convier
 
 
 ### Módulo Temporizador
+El módulo Temporizador controla el tiempo disponible durante una partida mediante una cuenta regresiva. Recibe las señales de actividad, dificultad y finalización del juego, y entrega el tiempo restante. También genera timeout para indicar que el tiempo se agotó.
 
+El parámetro FRECUENCIA_RELOJ establece cuántos ciclos representan un segundo. Su valor predeterminado es 100 000 000, correspondiente a un reloj de 100 MHz. El registro contador_segundo, de 27 bits, cuenta esos ciclos, mientras que tiempo_restante, de 8 bits, almacena los segundos disponibles. Así, la reducción del tiempo ocurre una vez por segundo, aunque el circuito se actualiza en cada flanco de reloj.
+
+Mientras partida_activa vale cero, el módulo mantiene el contador de ciclos y timeout en cero, y carga continuamente la duración correspondiente:
+
+| `dificultad` | Tiempo inicial |
+| --- | --- |
+| 0 | 120 segundos |
+| 1 | 90 segundos |
+
+Al comenzar la partida se utiliza el tiempo previamente cargado. Cambiar dificultad durante una partida activa no modifica la cuenta. Cuando contador_segundo alcanza CICLOS_SEGUNDO - 1, se reinicia y se resta un segundo a tiempo_restante. Si quedaba un segundo, el tiempo pasa a cero y se activa timeout.
+
+Si la partida sigue activa y aparece victoria o derrota, ambos registros conservan su valor y timeout se desactiva. Las asignaciones de cada registro a sí mismo expresan esa retención. Si partida_activa pasa a cero, se vuelve a cargar el tiempo inicial, porque esa condición tiene prioridad sobre victoria y derrota. Por su parte, rst reinicia ambos registros y timeout de forma asíncrona. Como el reinicio deja el tiempo en cero, debe existir un ciclo fuera de partida para cargar la duración antes de comenzar.
+
+La señal timeout es un pulso de un ciclo de reloj, no un indicador permanente. Si el tiempo permanece en cero y la partida continúa activa sin victoria ni derrota, el código vuelve a generar ese pulso cada segundo.
+
+Finalmente, el bloque always_comb obtiene centenas, decenas y unidades mediante divisiones enteras y operaciones de residuo. Cada salida contiene un dígito decimal en cuatro bits, adecuado para conectarse al módulo siete_segmentos, que se encarga de encender el display.
 
 
 
