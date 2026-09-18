@@ -27,8 +27,7 @@ Carné: 2018151568
 
 
 ## Introducción
-
-
+El juego de "Ahorcado" se basa en adivinar una palabra por medio de letra a la vez, si el jugador se equivoca se le cuenta un fallo, usualmente, representado por un dibujo de un muñeco de palo ahorcado, el jugador pierde si el dibujo se completa y gana cuando logra adivinar la palabra. Para este proyecto, se adaptó el juego con el uso de una FPGA que controla una pantalla LCD donde se muestra el estado del juego y una aplicación de PC que se encarga de recibir las entradas del jugador. El juego también cuenta con un buzzer que busca brindarle inmersión a las rondas, además, de 2 niveles de dificultad que se basan en el tiempo para adivinar la palabra y la cantidad de letras que esta contiene. El jugador siempre puede observar el tiempo restante de la partida por medio de displays 7 segmentos, y el número de intentos que tiene en la aplicación y el LCD.
 
 
 --- 
@@ -213,3 +212,5 @@ na 656. ISBN: 978-1-119-28266-2.
 3. YosysHQ. Memory handling. Yosys Documentation, s. f. Consulta: 18 de septiembre de 2026.
 4. OpenTitan. Primitive Component: LFSR. OpenTitan Documentation, s. f. Consulta: 18 de septiembre de 2026.
 5. Daniel Lemire. Fast Random Integer Generation in an Interval. arXiv, 2018. Identificador: arXiv:1805.10941.
+6. GeekforGeeks. Switch Debounce in Digital Circuits, 2026. Consulta: 18 de septiembre de 2026.
+7. RY-ELE. Temporizadores y circuitos de temporización: Implementación de retardos con relés, 2025. Consulta: 18 de septiembre de 2026.
