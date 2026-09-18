@@ -174,7 +174,7 @@ Este es un módulo pequeño que tiene como función principal comunicar al jugad
 
 ### Módulo Buzzer
 
-
+Este módulo activa un buzzer a distintas frecuencias para generar un sonido específico según su condición de activación. Estas condiciones son: acertar una letra, fallar una letra, ganar la ronda, y perder la ronda.
 
 
 ### Módulo FSM
