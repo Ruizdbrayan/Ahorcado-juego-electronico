@@ -56,15 +56,20 @@ Siguiendo el razonamiento de los bloques de registro REG 0 y REG 1, es important
 Para la salida final del bloque del LCD, existe un sub-bloque LCD screen,que se encarga de selecionar el espacio de la letra "adivinada" de la mano de la FSM que le comunica, la selección del registro(espacio en el que va a escribir), escribir en el registro y una señal de habilitar el LCD para visualizar la letra escogida
 
 
-### Indicador de posición mediante LEDs
+###  UART
 
 #### a) Diagrama modular / Diseño
 ![Diagrama modular de cuarto nivel del UART](../images/Diagrama_Modular_Nivel_4_UART.png)
 
 #### b) Objetivo del módulo
 
+El objetivo del módulo UART es establecer una comunicación serial asíncrona y bidireccional entre el sistema de bus y un dispositivo externo, como una computadora. Su interfaz permite escribir los datos que se desean transmitir, leer la información recibida y consultar el estado de la comunicación mediante registros seleccionados por una dirección.
 
-### Máquina de estado
+Para la transmisión, convierte los datos paralelos en una secuencia serial, incorporando los bits de inicio y parada. Durante la recepción, sincroniza la señal de entrada con el reloj interno, detecta el inicio de una trama y toma muestras de los bits para reconstruir el dato y almacenarlo hasta su lectura.
+
+Además, controla los tiempos de transmisión y recepción según la velocidad configurada y genera indicadores de transmisión activa, transmisión pendiente y dato recibido. De esta manera, integra el intercambio de información serial con las operaciones de lectura y escritura del bus.
+
+
 
 
 
