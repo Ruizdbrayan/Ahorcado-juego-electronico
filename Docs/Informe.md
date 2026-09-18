@@ -180,6 +180,18 @@ Este es un módulo pequeño que tiene como función principal comunicar al jugad
 
 ### Módulo FSM
 
+El módulo FSM se encarga de controlar la secuencia general del juego mediante una máquina de estados finitos. A partir de las señales de entrada, determina en qué etapa se encuentra la partida y activa las señales de control necesarias para coordinar los demás módulos.
+
+La máquina utiliza seis estados: SELECTOR, INICIALIZAR, ESPERAR_LETRA, PROCESAR_LETRA, COMPROBAR_RESULTADO y FINALIZADO. El flujo normal inicia en SELECTOR, donde se espera la señal partida_iniciada. Posteriormente se pasa a INICIALIZAR y luego a ESPERAR_LETRA, estado en el cual la FSM permanece hasta recibir una nueva letra o hasta que se agote el tiempo.
+
+Cuando letra_disponible se activa, la máquina pasa a PROCESAR_LETRA, donde se generan las señales procesar_letra y consumir_letra. Después se entra en COMPROBAR_RESULTADO, donde se verifica si la palabra fue completada o si el número de fallos alcanzó el límite de seis. Si ninguna de estas condiciones ocurre, la máquina regresa a ESPERAR_LETRA para continuar la partida.
+
+La señal resultado_victoria almacena el resultado final. Se coloca en 1 cuando palabra_completa está activa y en 0 cuando se alcanzan seis fallos o cuando se activa tiempo_agotado.
+
+En el estado FINALIZADO se activan las señales victoria o derrota según el resultado almacenado. Además, contador_final mantiene este estado durante 200_000_000 ciclos de reloj antes de regresar nuevamente a SELECTOR. La señal enviar_final solo se activa durante el primer ciclo de este estado, de manera que se genera un único pulso de finalización.
+
+Finalmente, estado_actual resume el estado de la FSM para el resto del sistema: 00 indica espera, 01 representa una partida en ejecución y 10 indica que la partida ha finalizado.
+
 
 
 ### Módulo TOP
