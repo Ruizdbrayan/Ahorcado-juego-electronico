@@ -38,15 +38,15 @@ Carné: 2018151568
 
 5. Almacenamiento de datos constantes en ROM
 
-En una FPGA, una memoria de solo lectura (ROM) permite almacenar datos constantes, como tablas de palabras o mensajes, y consultarlos mediante una dirección. En SystemVerilog puede describirse mediante una estructura case o un arreglo de tamaño fijo inicializado con constantes. También pueden utilizarse archivos de inicialización mediante $readmemh o $readmemb, según el soporte de la herramienta. La síntesis implementa la memoria utilizando los recursos disponibles en la FPGA [1].
+En una FPGA, una memoria de solo lectura (ROM) permite almacenar datos constantes, como tablas de palabras o mensajes, y consultarlos mediante una dirección. En SystemVerilog puede describirse mediante una estructura case o un arreglo de tamaño fijo inicializado con constantes. También pueden utilizarse archivos de inicialización mediante $readmemh o $readmemb, según el soporte de la herramienta. La síntesis implementa la memoria utilizando los recursos disponibles en la FPGA [3].
 
 Para almacenar cadenas de distinta longitud en palabras de ancho fijo, se puede representar cada carácter ASCII en un byte y reservar una capacidad máxima por cadena. Las posiciones restantes se rellenan con ceros y se guarda la longitud real, o se utiliza un carácter terminador para identificar el final. Otra alternativa consiste en almacenar los caracteres consecutivamente y mantener una tabla con la dirección inicial y la longitud de cada cadena. La primera organización simplifica el acceso; la segunda reduce el espacio ocupado por el relleno.
 
 6. Generación pseudoaleatoria mediante LFSR
 
-Retomando lo estudiado en el Proyecto 1, un LFSR es un registro que desplaza sus bits e incorpora una realimentación calculada mediante operaciones XOR entre posiciones seleccionadas. Genera una secuencia pseudoaleatoria que depende de una semilla inicial y termina repitiéndose. En una implementación basada en XOR, la semilla debe ser distinta de cero para evitar el bloqueo. En SystemVerilog se describe mediante un registro síncrono, operaciones XOR y concatenaciones para realizar el desplazamiento [2].
+Retomando lo estudiado en el Proyecto 1, un LFSR es un registro que desplaza sus bits e incorpora una realimentación calculada mediante operaciones XOR entre posiciones seleccionadas. Genera una secuencia pseudoaleatoria que depende de una semilla inicial y termina repitiéndose. En una implementación basada en XOR, la semilla debe ser distinta de cero para evitar el bloqueo. En SystemVerilog se describe mediante un registro síncrono, operaciones XOR y concatenaciones para realizar el desplazamiento [4].
 
-Para seleccionar un elemento de un banco con N entradas, se adapta la salida del LFSR al intervalo de 0 a N-1 y se registra el índice elegido para consultar la ROM. La operación % N permite limitar el rango, aunque puede favorecer algunos índices. Si se requiere equilibrar su frecuencia, pueden emplearse métodos de rechazo de candidatos [3].
+Para seleccionar un elemento de un banco con N entradas, se adapta la salida del LFSR al intervalo de 0 a N-1 y se registra el índice elegido para consultar la ROM. La operación % N permite limitar el rango, aunque puede favorecer algunos índices. Si se requiere equilibrar su frecuencia, pueden emplearse métodos de rechazo de candidatos [5].
 
 
 ---
@@ -193,3 +193,6 @@ Este es un módulo pequeño que tiene como función principal comunicar al jugad
 Edition. Morgan Kaufmann, 2022, p ´agina 564. ISBN: 978-0-12-820064-3
 2. Pong P. Chu. FPGA Prototyping by SystemVerilog Examples. Wiley, 2018, p ´agi-
 na 656. ISBN: 978-1-119-28266-2.
+3. YosysHQ. Memory handling. Yosys Documentation, s. f. Consulta: 18 de septiembre de 2026.
+4. OpenTitan. Primitive Component: LFSR. OpenTitan Documentation, s. f. Consulta: 18 de septiembre de 2026.
+5. Daniel Lemire. Fast Random Integer Generation in an Interval. arXiv, 2018. Identificador: arXiv:1805.10941.
