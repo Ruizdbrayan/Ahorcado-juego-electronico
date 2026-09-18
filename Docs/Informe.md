@@ -35,17 +35,12 @@ El juego de "Ahorcado" se basa en adivinar una palabra por medio de letra a la v
 
 ## Fundamentación teórica
 
-5. Almacenamiento de datos constantes en ROM
-
-En una FPGA, una memoria de solo lectura (ROM) permite almacenar datos constantes, como tablas de palabras o mensajes, y consultarlos mediante una dirección. En SystemVerilog puede describirse mediante una estructura case o un arreglo de tamaño fijo inicializado con constantes. También pueden utilizarse archivos de inicialización mediante $readmemh o $readmemb, según el soporte de la herramienta. La síntesis implementa la memoria utilizando los recursos disponibles en la FPGA [3].
-
-Para almacenar cadenas de distinta longitud en palabras de ancho fijo, se puede representar cada carácter ASCII en un byte y reservar una capacidad máxima por cadena. Las posiciones restantes se rellenan con ceros y se guarda la longitud real, o se utiliza un carácter terminador para identificar el final. Otra alternativa consiste en almacenar los caracteres consecutivamente y mantener una tabla con la dirección inicial y la longitud de cada cadena. La primera organización simplifica el acceso; la segunda reduce el espacio ocupado por el relleno.
-
-6. Generación pseudoaleatoria mediante LFSR
-
-Retomando lo estudiado en el Proyecto 1, un LFSR es un registro que desplaza sus bits e incorpora una realimentación calculada mediante operaciones XOR entre posiciones seleccionadas. Genera una secuencia pseudoaleatoria que depende de una semilla inicial y termina repitiéndose. En una implementación basada en XOR, la semilla debe ser distinta de cero para evitar el bloqueo. En SystemVerilog se describe mediante un registro síncrono, operaciones XOR y concatenaciones para realizar el desplazamiento [4].
-
-Para seleccionar un elemento de un banco con N entradas, se adapta la salida del LFSR al intervalo de 0 a N-1 y se registra el índice elegido para consultar la ROM. La operación % N permite limitar el rango, aunque puede favorecer algunos índices. Si se requiere equilibrar su frecuencia, pueden emplearse métodos de rechazo de candidatos [5].
+El funcionamiento general de los módulos LCD se basa en la arquitectura interna del controlador HD44780, el cual integra un generador de caracteres para fuentes predefinidas o personalizadas, una memoria de datos de despliegue donde se almacena lo que se muestra en pantalla y un par de registros esenciales: el registro de instrucción y el registro de datos. La selección entre ambos registros se lleva a cabo mediante la señal de control RS, la cual forma parte de una interfaz física de comunicación junto a las señales de lectura/escritura (R/W), habilitación (E) y las líneas de datos configurables entre cuatro y ocho bits. Para asegurar su operabilidad correcta, el módulo requiere ejecutar de forma estricta una secuencia de inicialización que abarca el ajuste de funciones, el encendido del despliegue, el modo de entrada y el limpiado de pantalla, todo esto mientras se monitorea o respeta la señal de ocupado para verificar cuándo el dispositivo está capacitado para recibir nuevos comandos.  
+En esta misma línea de soluciones de visualización, el PmodCLP de Digilent consiste en un módulo que incorpora una pantalla LCD alfanumérica regida por el mencionado controlador HD44780, lo que le permite presentar caracteres e información procesada a partir de las instrucciones dictadas por un dispositivo digital como una FPGA. Su integración física suele operar mediante un modo paralelo de cuatro bits que administra el intercambio de datos y comandos mediante las líneas de control RS y E. En el ámbito de una aplicación práctica como el juego del ahorcado, este periférico actúa como el medio directo de interacción visual con el usuario, desplegando elementos críticos del estado de la partida como la palabra oculta, las letras adivinadas y el progreso general. Para que dicha transmisión visual sea efectiva, resulta indispensable ejecutar correctamente la rutina inicial de configuración y apegarse con precisión a los tiempos de escritura estipulados por la tecnología del controlador.  
+Por otra parte, la recepción e ingreso de las jugadas desde el exterior se realiza mediante el protocolo de comunicación serial asíncrona conocido como UART, el cual transmite y recibe información entre sistemas sin recurrir a una señal de reloj compartida. Cada trama de información dentro de este esquema se delimita por un bit de inicio, los bits de datos propiamente dichos, un bit de paridad opcional y uno o más bits de parada, siendo el formato 8N1 una de sus configuraciones más extendidas al carecer de paridad e incluir ocho bits de datos con un bit de parada. En plataformas reconfigurables como las FPGAs, la tasa de baudios equivalente a la velocidad de transmisión se genera a partir del reloj del sistema mediante divisores de frecuencia o contadores, exigiendo que tanto el transmisor como el receptor alineen sus parámetros de transmisión, sintonicen la señal de entrada con el reloj interno, efectúen el muestreo cerca del punto medio de cada bit y validen la estructura de la trama para garantizar un flujo de entrada confiable hacia la lógica del juego.  
+Al llevar a cabo el diseño de los periféricos que interconectan estos bloques en buses de 32 bits, se aplican buenas prácticas que inician con la definición clara de un mapa de registros provisto de una decodificación de direcciones adecuada. Este mapa separa explícitamente los registros dedicados a las tareas de control, estado y datos, demarcando los permisos de lectura y escritura asociados a cada bit. Del mismo modo, debido a que las operaciones sobre periféricos como la pantalla no ocurren de manera instantánea, se integra un mecanismo de sincronización mediante señales de estado de inicio, ocupado y finalización que estructuran un protocolo de saludo entre el host procesador en la FPGA y los controladores externos.  
+A nivel de almacenamiento de información constante dentro de la FPGA, se recurre al uso de memorias de solo lectura para alojar tablas de palabras o mensajes fijos mediante descripciones sintácticas en SystemVerilog como estructuras de selección o arreglos inicializados. La organización del texto de longitud variable dentro de estas memorias admite alternativas arquitectónicas: se puede reservar un espacio uniforme rellenado con ceros y complementado con la longitud real o un delimitador final para facilitar el cálculo de las direcciones, o bien es posible empacar los caracteres de forma continua y gestionar una tabla paralela con los punteros de inicio y extensión de cada cadena para optimizar los recursos de memoria consumidos en la síntesis del circuito.  
+Finalmente, la selección aleatoria de los elementos almacenados en la memoria ROM se apoya en generadores pseudoaleatorios implementados como registros de desplazamiento con realimentación lineal. Estos circuitos generan secuencias periódicas a partir de una semilla inicial distinta de cero mediante operaciones lógicas de suma exclusiva en posiciones específicas de sus bits. Para convertir el valor del registro en un índice de consulta válido para la memoria, la salida pseudoaleatoria se adecua al rango disponible de entradas mediante operaciones aritméticas de módulo o técnicas de rechazo, garantizando una selección equilibrada de los datos constantes y completando el flujo funcional de la arquitectura del sistema.
 
 
 ---
@@ -174,22 +169,10 @@ Este es un módulo pequeño que tiene como función principal comunicar al jugad
 
 ### Módulo Buzzer
 
-Este módulo activa un buzzer a distintas frecuencias para generar un sonido específico según su condición de activación. Estas condiciones son: acertar una letra, fallar una letra, ganar la ronda, y perder la ronda.
+
 
 
 ### Módulo FSM
-
-El módulo FSM se encarga de controlar la secuencia general del juego mediante una máquina de estados finitos. A partir de las señales de entrada, determina en qué etapa se encuentra la partida y activa las señales de control necesarias para coordinar los demás módulos.
-
-La máquina utiliza seis estados: SELECTOR, INICIALIZAR, ESPERAR_LETRA, PROCESAR_LETRA, COMPROBAR_RESULTADO y FINALIZADO. El flujo normal inicia en SELECTOR, donde se espera la señal partida_iniciada. Posteriormente se pasa a INICIALIZAR y luego a ESPERAR_LETRA, estado en el cual la FSM permanece hasta recibir una nueva letra o hasta que se agote el tiempo.
-
-Cuando letra_disponible se activa, la máquina pasa a PROCESAR_LETRA, donde se generan las señales procesar_letra y consumir_letra. Después se entra en COMPROBAR_RESULTADO, donde se verifica si la palabra fue completada o si el número de fallos alcanzó el límite de seis. Si ninguna de estas condiciones ocurre, la máquina regresa a ESPERAR_LETRA para continuar la partida.
-
-La señal resultado_victoria almacena el resultado final. Se coloca en 1 cuando palabra_completa está activa y en 0 cuando se alcanzan seis fallos o cuando se activa tiempo_agotado.
-
-En el estado FINALIZADO se activan las señales victoria o derrota según el resultado almacenado. Además, contador_final mantiene este estado durante 200_000_000 ciclos de reloj antes de regresar nuevamente a SELECTOR. La señal enviar_final solo se activa durante el primer ciclo de este estado, de manera que se genera un único pulso de finalización.
-
-Finalmente, estado_actual resume el estado de la FSM para el resto del sistema: 00 indica espera, 01 representa una partida en ejecución y 10 indica que la partida ha finalizado.
 
 
 
