@@ -36,8 +36,17 @@ Carné: 2018151568
 
 ## Fundamentación teórica
 
+5. Almacenamiento de datos constantes en ROM
 
-/////////Acá va la investigación previa////////////
+En una FPGA, una memoria de solo lectura (ROM) permite almacenar datos constantes, como tablas de palabras o mensajes, y consultarlos mediante una dirección. En SystemVerilog puede describirse mediante una estructura case o un arreglo de tamaño fijo inicializado con constantes. También pueden utilizarse archivos de inicialización mediante $readmemh o $readmemb, según el soporte de la herramienta. La síntesis implementa la memoria utilizando los recursos disponibles en la FPGA [1].
+
+Para almacenar cadenas de distinta longitud en palabras de ancho fijo, se puede representar cada carácter ASCII en un byte y reservar una capacidad máxima por cadena. Las posiciones restantes se rellenan con ceros y se guarda la longitud real, o se utiliza un carácter terminador para identificar el final. Otra alternativa consiste en almacenar los caracteres consecutivamente y mantener una tabla con la dirección inicial y la longitud de cada cadena. La primera organización simplifica el acceso; la segunda reduce el espacio ocupado por el relleno.
+
+6. Generación pseudoaleatoria mediante LFSR
+
+Retomando lo estudiado en el Proyecto 1, un LFSR es un registro que desplaza sus bits e incorpora una realimentación calculada mediante operaciones XOR entre posiciones seleccionadas. Genera una secuencia pseudoaleatoria que depende de una semilla inicial y termina repitiéndose. En una implementación basada en XOR, la semilla debe ser distinta de cero para evitar el bloqueo. En SystemVerilog se describe mediante un registro síncrono, operaciones XOR y concatenaciones para realizar el desplazamiento [2].
+
+Para seleccionar un elemento de un banco con N entradas, se adapta la salida del LFSR al intervalo de 0 a N-1 y se registra el índice elegido para consultar la ROM. La operación % N permite limitar el rango, aunque puede favorecer algunos índices. Si se requiere equilibrar su frecuencia, pueden emplearse métodos de rechazo de candidatos [3].
 
 
 ---
@@ -109,7 +118,11 @@ Además, el módulo determina la cantidad de letras de la palabra seleccionada m
 
 
 ### Módulo de 7 segmentos
+El módulo siete_segmentos muestra un número de tres cifras a partir de las entradas unidades, decenas y centenas, recibidas por separado. Utiliza multiplexado para activar un dígito a la vez y compartir las líneas de segmentos entre las tres posiciones.
 
+El bloque secuencial always_ff incrementa contador_multiplex hasta 99 999. Cada 100 000 ciclos de reloj reinicia este contador y cambia digito_actual, alternando entre unidades, decenas y centenas. La entrada rst reinicia de forma asíncrona el contador y la selección del dígito.
+
+El bloque combinacional always_comb habilita el ánodo correspondiente y convierte el valor seleccionado, de 0 a 9, en el patrón de segmentos. Ambas salidas son activas en bajo: un cero enciende el segmento o habilita el dígito correspondiente. Los cinco dígitos restantes permanecen apagados. Cuando mostrar_guiones está activo, se presentan tres guiones en lugar del número; en el modo numérico, los valores fuera del intervalo de 0 a 9 dejan en blanco la posición correspondiente.
 
 
 
