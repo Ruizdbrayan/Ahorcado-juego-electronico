@@ -39,7 +39,7 @@ Este módulo busca procesar y validar cada una de las letras ingresadas por el j
 ![Diagrama modular de cuarto nivel de Selectores](../images/Diagrama_Modular_Nivel_4_Debouncer_SelectorDificultad_SelectorPalabra.png)
 
 #### b) Objetivo del módulo
-
+Este módulo se encarga de recibir y aplicar técnicas antirebotes con sincronizadores de 2 etapas a las entradas de los botones de cambio de dificultad, confirmación de la selección y el botón de reset general. La señal "Dificultad" entra al banco de memorias y selecciona la lista de palabras según sea el modo fácil o el modo difícil, luego con un generador de números aleatorios, se elige la palabra a descubrir según el índice que corresponda a la salida del generador. La palabra selecciona después se envía como "Palabra_memoria" hacia un MUX donde dependiendo si la señal "Partida_Iniciada" es 0 o 1, se envía esta o la señal "Palabra_Actual" hacia el Módulo de Validador-Letra.
 
 
 ### Periférico LCD

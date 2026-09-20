@@ -207,9 +207,238 @@ Los puertos de entrada y salida de TOP_AHORCADO corresponden directamente a las 
 
 
 ## Análisis de resultados
+Se realizó un testbench general para el módulo TOP donde se prueban las funciones en conjunto de los distintos módulos que lo componen. Esta primera imagen representa cuando el sistema recibe la señal de reset, donde no importa el estado de la partida, esta se reinicia al momento en que solicita al usuario elegir la dificultad de la partida, y el jugador puede comenzar una nueva ronda.
+![Testbench reset](../images/resultado_tb_reset.png)
+
+Para la segunda prueba, se simuló una partida perdida, donde el jugador fue incapaz de acertar la palabra. Los intentos se restan cada vez que se ingresa una letra incorrecta, excepto los momentos donde se ingresa una letra repetida, en la simulación se utilizó la letra "g" como ejemplo. Al acabar la partida, se devuelve un mensaje especificando que se perdió y también devuelve la palabra completa, además de retornar a la selección de dificultad.
+![Testbench derrota y letra repetida](../images/resultado_tb_derrota_repetida.png)
+
+Cuando la partida sufre de un "Timeout", se aplica la misma lógica que cuando se sufre una derrota por usar todos los intentos, se acaba la partida, devuelve el mensaje de derrota y la palabra, y regresa a la selección de dificultad.
+![Testbench timeout](../images/resultado_tb_timeout.png)
+
+Para el caso de victoria, el final de la partida es similar al de la derrota, excepto que el mensaje especifica que se ganó la ronda.
+![Testbench victoria](../images/resultado_tb_victoria.png)
+
+En la ventana del waveform se observa un ejemplo de como actúan y manejas las señales correspondientes una letra ingresada incorrecta.
+![Waveform Módulo TOP](../images/resultado_tb_waveform.png)
+
+Lo siguiente es el resultado que se escribe en la terminal al finalizar las pruebas del testbench. 
+```Testbench
+# run 1000ns
+
+----------------------------------------------------
+PRUEBA 1: ESTADO INICIAL
+----------------------------------------------------
+[OK]           FSM inicia en SELECTOR
+[OK]       Dificultad inicial = FACIL
+[OK]             Victoria inicial = 0
+[OK]              Derrota inicial = 0
+[OK]             Fallos iniciales = 0
+
+----------------------------------------------------
+PRUEBA 2: CAMBIO DE DIFICULTAD
+----------------------------------------------------
+INFO: [USF-XSim-96] XSim completed. Design snapshot 'TB_TOP_AHORCADO_behav' loaded.
+INFO: [USF-XSim-97] XSim simulation ran for 1000ns
+launch_simulation: Time (s): cpu = 00:00:15 ; elapsed = 00:00:15 . Memory (MB): peak = 1932.680 ; gain = 0.000
+run 10 s
+[OK]      Dificultad cambia a DIFICIL
+[OK]        Dificultad vuelve a FACIL
+
+----------------------------------------------------
+PRUEBA 3: INICIAR PARTIDA
+----------------------------------------------------
+[OK]          Partida llega a JUGANDO
+[OK]      partida_iniciada vuelve a 0
+[OK]            FSM permanece JUGANDO
+[OK]     No existe victoria inmediata
+[OK]      No existe derrota inmediata
+
+----------------------------------------------------
+PRUEBA 4: PALABRA SELECCIONADA
+----------------------------------------------------
+[INFO] Palabra seleccionada = BESO    
+[INFO] Cantidad de letras = 4
+[OK]        Cantidad de letras valida
+[OK]  Palabra estado fue inicializada
+[OK]  Primera letra inicia como guion
+[OK]  Segunda letra inicia como guion
+[OK]  Tercera letra inicia como guion
+[OK]   Cuarta letra inicia como guion
+
+----------------------------------------------------
+PRUEBA 5: LCD
+----------------------------------------------------
+[OK]       LCD termino inicializacion
+
+----------------------------------------------------
+PRUEBA 6: LETRA INCORRECTA
+----------------------------------------------------
+[INFO] Letra incorrecta 1: A
+[INFO] Letra incorrecta 2: C
+[INFO] Letra incorrecta 3: D
+[INFO] Letra incorrecta 4: F
+[INFO] Letra incorrecta 5: G
+[INFO] Letra incorrecta 6: H
+[OK] ontraron seis letras incorrectas
+[INFO] Enviando letra: A
+[OK] RX limpiado correctamente
+[OK] ra incorrecta aumenta fallos a 1
+[OK]            FSM permanece JUGANDO
+[OK]           Derrota permanece en 0
+
+----------------------------------------------------
+PRUEBA 7: LETRA REPETIDA
+----------------------------------------------------
+[INFO] Enviando letra: A
+[OK] RX limpiado correctamente
+[OK] Letra repetida no aumenta fallos
+
+----------------------------------------------------
+PRUEBA 8: LETRAS CORRECTAS
+----------------------------------------------------
+[INFO] Letra correcta: B
+[INFO] Enviando letra: B
+[OK] RX limpiado correctamente
+[INFO] Letra correcta: E
+[INFO] Enviando letra: E
+[OK] RX limpiado correctamente
+[INFO] Letra correcta: S
+[INFO] Enviando letra: S
+[OK] RX limpiado correctamente
+[INFO] Letra correcta: O
+[INFO] Enviando letra: O
+[OK] RX limpiado correctamente
+
+----------------------------------------------------
+PRUEBA 9: VICTORIA
+----------------------------------------------------
+[OK]            FSM pasa a FINALIZADO
+[OK]                     Victoria = 1
+[OK]                      Derrota = 0
+[OK]              mostrar_guiones = 1
+[OK] e palabra revelada correctamente
+[OK] e palabra revelada correctamente
+[OK] e palabra revelada correctamente
+[OK] e palabra revelada correctamente
+
+----------------------------------------------------
+PRUEBA 10: LCD DESPUES DE VICTORIA
+----------------------------------------------------
+[OK] LCD termino pantalla de victoria
+
+----------------------------------------------------
+PRUEBA 11: ESTADO FINAL
+----------------------------------------------------
+[OK]          Victoria permanece en 1
+[OK]           Derrota permanece en 0
+[OK]      FSM permanece en FINALIZADO
+
+----------------------------------------------------
+PRUEBA 12: SALIDAS
+----------------------------------------------------
+[OK]    Segmentos tienen valor valido
+[OK]       Anodos tienen valor valido
+[OK]         LEDs tienen valor valido
+[OK]        Buzzer tiene valor valido
+
+====================================================
+INICIANDO SEGUNDA PARTIDA
+====================================================
+
+----------------------------------------------------
+PRUEBA 13: NUEVA PARTIDA
+----------------------------------------------------
+[OK]    Reset devuelve FSM a SELECTOR
+[OK]              Victoria vuelve a 0
+[OK]               Derrota vuelve a 0
+[OK]          Fallos se reinician a 0
+[OK]        Dificultad vuelve a FACIL
+[OK]          Partida llega a JUGANDO
+[OK]              Victoria vuelve a 0
+[OK]               Derrota vuelve a 0
+[OK]          Fallos se reinician a 0
+
+----------------------------------------------------
+PRUEBA 14: SEGUNDA PARTIDA
+----------------------------------------------------
+[INFO] Segunda palabra = AVION   
+[INFO] Cantidad de letras = 5
+[OK]        Cantidad de letras valida
+[OK]      Primera letra inicia oculta
+[OK] tida no tiene victoria inmediata
+[OK] rtida no tiene derrota inmediata
+
+----------------------------------------------------
+PRUEBA 15: SEIS LETRAS INCORRECTAS
+----------------------------------------------------
+[INFO] Letra incorrecta 1: B
+[INFO] Letra incorrecta 2: C
+[INFO] Letra incorrecta 3: D
+[INFO] Letra incorrecta 4: E
+[INFO] Letra incorrecta 5: F
+[INFO] Letra incorrecta 6: G
+[OK] ontraron seis letras incorrectas
+[INFO] Enviando letra: B
+[OK] RX limpiado correctamente
+[INFO] Enviando letra: C
+[OK] RX limpiado correctamente
+[INFO] Enviando letra: D
+[OK] RX limpiado correctamente
+[INFO] Enviando letra: E
+[OK] RX limpiado correctamente
+[INFO] Enviando letra: F
+[OK] RX limpiado correctamente
+[INFO] Enviando letra: G
+[OK] RX limpiado correctamente
+[OK]               Contador llega a 6
+[OK]   Comparador detecta seis fallos
+[OK]            FSM pasa a FINALIZADO
+
+----------------------------------------------------
+PRUEBA 16: DERROTA
+----------------------------------------------------
+[OK]         FSM permanece FINALIZADO
+[OK]                      Derrota = 1
+[OK]                     Victoria = 0
+
+----------------------------------------------------
+PRUEBA 17: UART DESPUES DE DERROTA
+----------------------------------------------------
+[OK]         FSM permanece FINALIZADO
+[OK]           Derrota permanece en 1
+[OK]          Victoria permanece en 0
+[OK] os no cambian despues de derrota
+
+----------------------------------------------------
+PRUEBA 18: RESET FINAL
+----------------------------------------------------
+[OK]    Reset devuelve FSM a SELECTOR
+[OK]            Reset limpia victoria
+[OK]             Reset limpia derrota
+[OK]              Reset limpia fallos
+[OK] eset devuelve dificultad a FACIL
+[OK]                  Reset limpia TX
+[OK]                  Reset limpia RX
+[OK]        Reset limpia TX pendiente
+[OK]         Reset limpia RX recibido
 
 
+====================================================
+             FIN DE PRUEBAS AHORCADO
+====================================================
 
+Pruebas ejecutadas : 18
+Errores encontrados: 0
+
+****************************************************
+*                                                  *
+*          TODAS LAS PRUEBAS PASARON              *
+*                                                  *
+*                  18 / 18                       *
+*                                                  *
+****************************************************
+```
 ---
 
 ### Conclusión
