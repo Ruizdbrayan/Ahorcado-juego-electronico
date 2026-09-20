@@ -208,18 +208,23 @@ Los puertos de entrada y salida de TOP_AHORCADO corresponden directamente a las 
 
 ## Análisis de resultados
 Se realizó un testbench general para el módulo TOP donde se prueban las funciones en conjunto de los distintos módulos que lo componen. Esta primera imagen representa cuando el sistema recibe la señal de reset, donde no importa el estado de la partida, esta se reinicia al momento en que solicita al usuario elegir la dificultad de la partida, y el jugador puede comenzar una nueva ronda.
+
 ![Testbench reset](../images/resultado_tb_reset.png)
 
 Para la segunda prueba, se simuló una partida perdida, donde el jugador fue incapaz de acertar la palabra. Los intentos se restan cada vez que se ingresa una letra incorrecta, excepto los momentos donde se ingresa una letra repetida, en la simulación se utilizó la letra "g" como ejemplo. Al acabar la partida, se devuelve un mensaje especificando que se perdió y también devuelve la palabra completa, además de retornar a la selección de dificultad.
+
 ![Testbench derrota y letra repetida](../images/resultado_tb_derrota_repetida.png)
 
 Cuando la partida sufre de un "Timeout", se aplica la misma lógica que cuando se sufre una derrota por usar todos los intentos, se acaba la partida, devuelve el mensaje de derrota y la palabra, y regresa a la selección de dificultad.
+
 ![Testbench timeout](../images/resultado_tb_timeout.png)
 
 Para el caso de victoria, el final de la partida es similar al de la derrota, excepto que el mensaje especifica que se ganó la ronda.
+
 ![Testbench victoria](../images/resultado_tb_victoria.png)
 
 En la ventana del waveform se observa un ejemplo de como actúan y manejas las señales correspondientes una letra ingresada incorrecta.
+
 ![Waveform Módulo TOP](../images/resultado_tb_waveform.png)
 
 Lo siguiente es el resultado que se escribe en la terminal al finalizar las pruebas del testbench. 
